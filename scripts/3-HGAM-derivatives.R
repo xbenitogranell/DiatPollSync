@@ -1,13 +1,10 @@
-###############################
-#######   HGAM models  ########
-###############################
+################################################
+#######   HGAM-based derivative models  ########
+################################################
 
-########################################
-####### HGAM diatom assemblages ########
-########################################
+#######  diatom assemblages
 
 #read dataframe with diatom absolute counts
-#mergedCores <- read.csv("Data/mergedCores_counts3.csv") #read dataframe with diatom absolute counts including Fondococha
 mergedCores <- read.csv("data/mergedCores_counts4.csv")[-1] #read dataframe with diatom absolute counts including Fondococha
 
 #import dataframe wiht old and new names to group
@@ -110,8 +107,16 @@ diat_plot_data$modI_fit <- as.numeric(diat_modI_fit$fit)
 
 # comparing non-shared trends
 diat_plot_data <- gather(diat_plot_data, key=model, value=fit, modS_fit, modI_fit)
+
 diat_plot_data <- mutate(diat_plot_data, se= c(as.numeric(diat_modS_fit$se.fit),
                                                as.numeric(diat_modI_fit$se.fit)),
+                         upper = exp(fit + (2 * se)),
+                         lower = exp(fit - (2 * se)),
+                         fit   = exp(fit))
+
+# For only one model
+diat_plot_data <- gather(diat_plot_data, key=model, value=fit, modI_fit)
+diat_plot_data <- mutate(diat_plot_data, se= c(as.numeric(diat_modI_fit$se.fit)),
                          upper = exp(fit + (2 * se)),
                          lower = exp(fit - (2 * se)),
                          fit   = exp(fit))
@@ -148,9 +153,11 @@ diat_plot
 set.seed(10) #set a seed so this is repeatable
 n_sims = 250
 
+n_length = 140
+
 years <- seq(min(diat_plot_data$negAge),
              max(diat_plot_data$negAge),
-             length.out = 40)
+             length.out = n_length)
 
 #model <- diatom_gam_S
 model <- diatom_gam_I
@@ -164,7 +171,7 @@ random_coefs <- t(rmvn(n_sims, mu = coef(model),V = vcov(model)))
 confint_sims <- crossing(spp=unique(diat_plot_data$spp),
                          negAge = seq(min(diat_plot_data$negAge),
                                       max(diat_plot_data$negAge),
-                                      length.out = 40),
+                                      length.out = n_length),
                          log_total_counts=0)
 
 map_pred_sims <- predict(model,
@@ -211,7 +218,7 @@ deriv_summaries <- derivs %>%
                              med   = ~quantile(.,probs = 0.5)))
 
 ## save derivative summaries for later use
-write.csv(deriv_summaries, "outputs/diatom-derivatives.csv", row.names = FALSE)
+write.csv(deriv_summaries, "outputs/diatom-derivatives_24timeSteps.csv", row.names = FALSE)
 
 ########################################
 ####### HGAM pollen assemblages ########
@@ -245,7 +252,7 @@ pollen[is.na(pollen)] <- 0 #Replace NA (if any) by 0
 
 ## assign dataframe to analyze
 llaviucu_pollen <- pollen
-llaviucu_pollen <- agropastolarism
+#llaviucu_pollen <- agropastolarism
 
 
 #Select most common species (only for pollen dataset)
@@ -339,6 +346,13 @@ pollen_plot_data <- mutate(pollen_plot_data, se= c(as.numeric(pollen_modS_fit$se
                            lower = exp(fit - (2 * se)),
                            fit   = exp(fit))
 
+# For one model only
+pollen_plot_data <- gather(pollen_plot_data, key=model, value=fit, modI_fit)
+pollen_plot_data <- mutate(pollen_plot_data, se= c(as.numeric(pollen_modI_fit$se.fit)),
+                           upper = exp(fit + (2 * se)),
+                           lower = exp(fit - (2 * se)),
+                           fit   = exp(fit))
+
 #Plot the model output for non-shared trends, with means plus standard deviations for each model.
 pollen_plot_model_labels <- paste("Model", c("S", "I"))
 pollen_plot_model_labels <- factor(pollen_plot_model_labels, levels = pollen_plot_model_labels)
@@ -390,9 +404,11 @@ calc_1st_deriv = function(fit_before, fit_after,delta) {
 set.seed(10) #set a seed so this is repeatable
 n_sims = 250
 
+n_length = 140
+
 years <- seq(min(pollen_plot_data$negAge),
              max(pollen_plot_data$negAge),
-             length.out = 40)
+             length.out = n_length)
 
 #model <- pollen_gam_S
 model <- pollen_gam_I
@@ -406,7 +422,7 @@ random_coefs <- t(rmvn(n_sims, mu = coef(model),V = vcov(model)))
 confint_sims <- crossing(spp=unique(pollen_plot_data$spp),
                          negAge = seq(min(pollen_plot_data$negAge),
                                       max(pollen_plot_data$negAge),
-                                      length.out = 40),
+                                      length.out = n_length),
                          log_total_counts=0)
 
 map_pred_sims <- predict(model,
@@ -480,9 +496,14 @@ sd_plot <- deriv_summaries %>%
   theme_bw()
 sd_plot
 
+
 ## save derivative summaries for later use
 write.csv(deriv_summaries, "outputs/pollen-natural-derivatives.csv", row.names = FALSE)
 write.csv(deriv_summaries, "outputs/pollen-agropastoralism-derivatives.csv", row.names = FALSE)
+
+# save derivative summaries at 24 time steps
+write.csv(deriv_summaries, "outputs/pollen-agropastoralism-derivatives_24timeSteps.csv", row.names = FALSE)
+write.csv(deriv_summaries, "outputs/pollen-natural-derivatives_24timeSteps.csv", row.names = FALSE)
 
 
 ## Read HGAM-derivatives results for plotting

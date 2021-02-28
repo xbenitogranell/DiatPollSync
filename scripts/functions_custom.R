@@ -1,3 +1,5 @@
+## Functions from Blas Benito (https://github.com/BlasBenito/BaleFire) https://zenodo.org/record/2599859#.YCTzbGhKiUk 
+
 
 ##-----------------------------------------------------------------------------
 # Function for testing for autocorrelation of residuals in a model using Moran's I, then fitting an exponential model to the Moran's I estimates. 
@@ -121,8 +123,8 @@ interpolateDatasets<-function(datasets.list, age.column.name, interpolation.time
       interpolation.formula = as.formula(paste(column.to.interpolate, "~", age.column.name, sep=" "))
 
       #iteration through span values untill R-squared equals 1
-      #span.values=seq(0.01, -0.000001, by=-0.000001)
-      span.values=seq(40, -4, by=-0.4)
+      span.values=seq(0.024, -0.0000024, by=-0.000024)
+      #span.values=seq(40, -4, by=-0.4)
       for(span in span.values){
         interpolation.function = loess(interpolation.formula, data=temp, span=span, control=loess.control(surface="direct"))
 
@@ -133,7 +135,7 @@ interpolateDatasets<-function(datasets.list, age.column.name, interpolation.time
 
       print(paste("Correlation between observed and interpolated data = ", cor(interpolation.function$fitted, temp[, column.to.interpolate]), sep=""))
 
-      interpolation.function = loess(interpolation.formula, data=temp, span=40, control=loess.control(surface="direct"))
+      interpolation.function = loess(interpolation.formula, data=temp, span=0.02, control=loess.control(surface="direct"))
       interpolation.result = predict(interpolation.function, newdata=reference.age, se=FALSE)
 
       #constraining the range of the interpolation result to the range of the reference data
@@ -190,14 +192,18 @@ backwardLags <- function(lags, reference.data, data.to.lag){
 
     #get the age of the replicated line
     diat.case.age=diat[diat.case, "age"]
-    diat.case.age.plus.lags=round((diat.case.age + (diff(pollen$age)[1] * max(lags))), 2)
+    
+    #diat.case.age.plus.lags=round((diat.case.age + (diff(pollen$age)[1] * max(lags))), 2)
+    diat.case.age.plus.lags=round((diat.case.age + (diff(agropastolarism$age)[1] * max(lags))), 2)
     
     #if beyond maximum age
     if (diat.case.age.plus.lags > max(pollen$age)){break}
-
+    #if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
+    
     #get from pollen the lines with age > age.diatoms && age <= age.diatoms + lags
-    pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
-
+    #pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    
     #put the data together
     pollen.temp=data.frame(diatom_deriv=diat.value, pollen_deriv=pollen.temp, lag=lags)
 
@@ -217,7 +223,7 @@ backwardLags <- function(lags, reference.data, data.to.lag){
   lags.column=lag.data$lag
   
   #standardize
-  lag.data=scale(lag.data[, c("diatom_deriv", "pollen_deriv")])
+  #lag.data=scale(lag.data[, c("diatom_deriv", "pollen_deriv")])
   
   #add lag
   lag.data=data.frame(lag.data, lag=lags.column)
@@ -225,59 +231,6 @@ backwardLags <- function(lags, reference.data, data.to.lag){
   #lag as factor
   lag.data$lag=as.factor(lag.data$lag)
   
-  return(lag.data)
-}
-
-#GENERATES LAGGED CHARCOAL DATA AFTER EVERY ERICA SAMPLE
-forwardLags <- function(lags, reference.data, data.to.lag){
-
-  #df to store the lagged data
-  lag.data = data.frame(ericaceae.par=double(), charcoal.acc.rate=double(), lag=integer())
-
-  #iterates through erica lines
-  for (erica.case in nrow(erica):1){
-
-    #take a line of the erica dataframe and replicate it as many times as lags are
-    erica.value = rep(erica[erica.case, "ericaceae.par"], max(lags))
-
-    #get the age of the replicated line as age.erica
-    erica.case.age=erica[erica.case, "age"]
-    erica.case.age.plus.lags=round((erica.case.age - (0.01 * max(lags))), 3) #
-
-    #if beyond maximum age
-    if (erica.case.age.plus.lags < min(char.interpolated$age)){break}
-
-    #get from char.interpolated the lines with age > age.erica && age <= age.erica + lags
-    char.temp=char.interpolated[which(char.interpolated$age < erica.case.age & char.interpolated$age >= erica.case.age.plus.lags), "charcoal.acc.rate"]
-
-    #put the data together (NOTE: lags have to be added in reverse)
-    char.temp=data.frame(ericaceae.par=erica.value, charcoal.acc.rate=char.temp, lag=rev(lags))
-    names(char.temp)=names(lag.data)
-
-    #put them in the final table
-    lag.data=rbind(lag.data, char.temp)
-
-  }#end of iterations
-
-  #remove stuff we don't need
-  rm(char.temp, erica.case, erica.case.age, erica.case.age.plus.lags, erica.value)
-
-  #order by lag
-  lag.data=lag.data[order(lag.data$lag),]
-
-  #standardize data
-  #get lags column
-  lags.column=lag.data$lag
-
-  #standardize
-  lag.data=scale(lag.data[, c("ericaceae.par", "charcoal.acc.rate")])
-
-  #add lag
-  lag.data=data.frame(lag.data, lag=lags.column)
-
-  #lag as factor
-  lag.data$lag=as.factor(lag.data$lag)
-
   return(lag.data)
 }
 
@@ -355,7 +308,9 @@ modelLagData <- function(model.formula, lagged.data){
   output.df = data.frame(lag=as.numeric(rownames(output.df)), Coefficient=output.df$V1)
   output.df[, "p-value"] = as.data.frame(do.call(rbind, results.list.pvalue))$V1
   output.df$R2 = as.data.frame(do.call(rbind, results.list.R2))$V1
-  output.df$lag=output.df$lag*10
+  #output.df$lag=output.df$lag*10
+  output.df$lag=output.df$lag*24 #temporal resolution
+  
 
   #se of coefficients
   output.df.se = as.data.frame(do.call(rbind, results.list.coef.se))
@@ -413,7 +368,7 @@ modelRandomLagData <- function(lagged.data, model.formula, iterations){
 
 
 #FUNCTION TO PLOT MODELING RESULTS
-plotModelOutput <- function(backward.results, backward.results.random, filename, width, height, title.size, text.size){
+plotModelOutput <- function(backward.results, backward.results.random, width, height, title.size, text.size, filename){
 
   #axes limits
   max.lag = max(c(backward.results$lag))
@@ -437,11 +392,15 @@ plotModelOutput <- function(backward.results, backward.results.random, filename,
     geom_ribbon(aes(ymin=lower,ymax=upper), alpha=0.5, fill=viridis.colors[5]) +
     geom_line(size=1.5, color=viridis.colors[1]) +
     ggtitle(expression("Pollen" %->% "Diatoms")) +
+    #ggtitle(expression("Agropastoralism indicators" %->% "Diatoms")) +
     theme(legend.position="none") +
     xlab("") +
     ylab("Standardized coefficient") +
     scale_y_continuous(breaks=seq(min.coefficient, max.coefficient, by=0.2)) +
-    scale_x_reverse(limits=c(max.lag, 10), breaks=c(10, seq(100, max.lag, by=100))) +
+    #scale_x_reverse(limits=c(max.lag, 10), breaks=c(10, seq(100, max.lag, by=100))) +
+    scale_x_reverse(limits=c(max.lag, diff(pollen$age)[1]), 
+                    breaks=c(diff(pollen$age)[1], seq(100,max.lag, by=960))) +
+    #scale_x_reverse(limits=c(max.lag, diff(agropastolarism$age)[1]), breaks=c(diff(agropastolarism$age)[1], seq(40, max.lag, by=diff(agropastolarism$age)[1]))) +
     theme(axis.text = element_text(size=text.size),
           plot.title = element_text(size = title.size),
           plot.margin = unit(c(0, 0, 0, 0), "cm"),
@@ -460,7 +419,10 @@ plotModelOutput <- function(backward.results, backward.results.random, filename,
     xlab("Years (before Diatom samples)") +
     ylab("Pseudo R squared") +
     scale_y_continuous(breaks=seq(0, max.R2, by=0.1)) +
-    scale_x_reverse(limits=c(max.lag, 10), breaks=c(10, seq(100, max.lag, by=100))) +
+    #scale_x_reverse(limits=c(max.lag, 10), breaks=c(10, seq(100, max.lag, by=100))) +
+    #scale_x_reverse(limits=c(max.lag, diff(agropastolarism$age)[1]), breaks=c(diff(agropastolarism$age)[1], seq(40, max.lag, by=diff(agropastolarism$age)[1]))) +
+    scale_x_reverse(limits=c(max.lag, diff(pollen$age)[1]), 
+                    breaks=c(diff(pollen$age)[1], seq(100,max.lag, by=960))) +
     theme(axis.text = element_text(size=text.size),
           axis.text.x = element_text(size=text.size),
           plot.title = element_text(size = title.size),

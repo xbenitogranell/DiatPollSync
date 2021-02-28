@@ -1,5 +1,4 @@
 #code for analyze Lake Llaviucu pollen data with PrC and GAM
-setwd("/Volumes/xbenitogranell-data/0_project/data/cores")
 
 # load libraries for functions used
 library(tidyverse)
@@ -10,15 +9,106 @@ library(ggplot2)
 library(cowplot)
 library(gratia)
 
-## read PrC pollen and diatom datasets
-pollenPrC <- read.csv("outputs/pollen-PrC.csv", row.names = 1)
-agropastolarismPrC <- read.csv( "outputs/agropastoralism-PrC.csv", row.names = 1)
 
-diatomPrC <- readRDS("outputs/PrC-cores-diatoms.rds") %>%
-  filter(Lake=="llaviucu")
+## Model temporal contributions of pollen PrC and Ti on diatom PrC
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
+
+
+# model temporal contributions of the covariates to diatom PrC
+library(mgcv)
+# this chunk run the model weighting in the elapsed time of the pollen (Majoi) core
+mod1 <- gam(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+            data = interpolatedData, method = "REML", 
+            weights = elapsedTime / mean(elapsedTime),
+            select = TRUE, family = gaussian(link="identity"),
+            na.action = na.omit,
+            knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+# this chunk run the model weighting in the elapsed time of the diatom core
+mod1 <- gam(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+            data = interpolatedData, method = "REML", 
+            weights = elapsedTime_diat / mean(elapsedTime_diat),
+            select = TRUE, family = gaussian(link="identity"),
+            na.action = na.omit) 
+
+pacf(residuals(mod1)) # indicates AR1
+
+plot(mod1, page=1, scale = 0)
+gam.check(mod1)
+summary(mod1)
+
+#accounting for temporal autocorrelation
+mod1.car <- gamm(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+                 data = interpolatedData, method = "REML", 
+                 weights = elapsedTime/ mean(elapsedTime),
+                 family = gaussian(link="identity"),
+                 correlation = corCAR1(form = ~ Age),
+                 knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+
+pacf(residuals(mod1.car$lme)) # indicates AR1
+
+plot(mod1.car$gam, page=1, scale = 0)
+summary(mod1.car$gam)
+gam.check(mod1.car$gam)
+
+
+#Compare different model fits using AIC
+AIC_table <- AIC(mod1,mod1.car$lme)%>%
+  rownames_to_column(var= "Model")%>%
+  mutate(data_source = rep(c("diatom_data")))%>%
+  group_by(data_source)%>%
+  mutate(deltaAIC = AIC - min(AIC))%>%
+  ungroup()%>%
+  dplyr::select(-data_source)%>%
+  mutate_at(.vars = vars(df,AIC, deltaAIC), 
+            .funs = funs(round,.args = list(digits=0)))
+
+AIC_table
+
+# Predict GAM
+## data to predict at
+#Check NAs and remove rows
+row.has.na <- apply(interpolatedData, 1, function(x){any(is.na(x))})
+sum(row.has.na)
+interpolatedData <- interpolatedData[!row.has.na,]
+
+## Predict
+predGam <- cbind(interpolatedData, 
+                 data.frame(predict.gam(mod1, interpolatedData, 
+                 type = "terms" , se.fit = TRUE)))
+
+#plot
+var <- predGam$fit.s.agropastPrC.
+se.var <- predGam$se.fit.s.agropastPrC.
+
+predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var), alpha = 0.1)) +
+  #scale_x_reverse() +
+  labs(y = "Diatom GAM PrC", x = "Cal yr BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  ggtitle("")
+
+predGamPlt
+
+ggsave("outputs/diatomPrC_GAM_covariates.png",
+       plot = predGamPlt ,
+       width = 10,
+       height=8,
+       units="in",
+       dpi = 400)
 
 
 ### fit GAM Gausian Location-Scale model
+# read PrC pollen and diatom datasets
+pollenPrC <- read.csv("outputs/pollen-PrC.csv", row.names = 1)
+agropastolarismPrC <- read.csv( "outputs/agropastoralism-PrC.csv", row.names = 1)
+diatomPrC <- readRDS("outputs/PrC-cores-diatoms.rds") %>%
+  filter(Lake=="llaviucu")
+
 
 #Transform dataframe to include elapsedtime ("years mud slice") and standarized PrC scores
 diatoms <- transform(diatomPrC, Age = upper_age, negAge = - upper_age, elapsedTime = abs(upper_age - lower_age), 
@@ -51,7 +141,7 @@ agropastolarism <- transform(agropastolarismPrC, Age = upper_age, negAge = - upp
                     rootPrC = sqrt(PrC), logPrC = log10(PrC+0.25))
 agropastolarism <- arrange(agropastolarism,desc(negAge))
 
-modAgrosp <- gam(list(PrC ~ s(negAge, k = 30, bs = "ad"),
+modAgrosp <- gam(list(rootPrC ~ s(negAge, k = 30, bs = "ad"),
                       ~ elapsedTime + s(negAge, k=15)),
                  data = agropastolarism, method = "REML", family = gaulss(link = list("identity", "logb")))
 
@@ -113,7 +203,8 @@ predDiatPlt <- ggplot(predDiat, aes(x = Age, y = fitted, group = term)) +
   geom_line() +
   facet_wrap(~ term, nrow = 2, labeller = label_parsed, scales = "free_y") +
   scale_x_reverse() +
-  labs(y = "Fitted", x = "Age", title = "Diatoms")
+  labs(y = "Fitted", x = "Age", title = "Diatoms") +
+  theme_classic()
 predDiatPlt
 
 predPollPlt <- ggplot(predPoll, aes(x = Age, y = fitted, group = term)) +
@@ -121,7 +212,8 @@ predPollPlt <- ggplot(predPoll, aes(x = Age, y = fitted, group = term)) +
   geom_line() +
   facet_wrap(~ term, nrow = 2, labeller = label_parsed, scales = "free_y") +
   scale_x_reverse() +
-  labs(y = "Fitted", x = "Age", title = "Pollen")
+  labs(y = "Fitted", x = "Age", title = "Pollen") +
+  theme_classic() 
 predPollPlt
 
 predAgropastPlt <- ggplot(predAgropast, aes(x = Age, y = fitted, group = term)) +
@@ -129,7 +221,8 @@ predAgropastPlt <- ggplot(predAgropast, aes(x = Age, y = fitted, group = term)) 
   geom_line() +
   facet_wrap(~ term, nrow = 2, labeller = label_parsed, scales = "free_y") +
   scale_x_reverse() +
-  labs(y = "Fitted", x = "Age", title = "Pollen (agrospastolarism indicators)")
+  labs(y = "Fitted", x = "Age", title = "Pollen (agrospastolarism indicators)") +
+  theme_classic()
 predAgropastPlt
 
 # combine the three plots
@@ -142,6 +235,7 @@ ggsave("outputs/llaviucu-diatom-pollen-GAULSS.png",
        height=6,
        units="in",
        dpi = 400)
+
 
 
 
