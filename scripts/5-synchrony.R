@@ -17,11 +17,11 @@ pollen <- derivAll %>% filter(proxy=="pollen") %>% select(deriv_mean_med,deriv_s
 df <- cbind(diat,agropast)
 colnames(df) <- c("diat_deriv_mean", "diat_sd_mean", "agropast_deriv_mean", "agropast_sd_mean")
 
-#fitting GLS model with autocorrelated residuals
+#fitting GLS model without autocorrelated residuals
 diat.agropast.gls <- gls(diat_deriv_mean ~ agropast_deriv_mean, data=df)
 summary(diat.agropast.gls)
 
-#autocorrelation of the residuals
+#check autocorrelation of the residuals
 acf(residuals(diat.agropast.gls)) # evidence for correlated residuals
 pacf(residuals(diat.agropast.gls)) # indicates AR1
 
