@@ -3,6 +3,108 @@
 #source("scripts/functions.R")
 library(tidyverse)
 
+
+## Model temporal contributions of pollen PrC and Ti on diatom PrC
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
+
+
+# model temporal contributions of the covariates to diatom PrC
+library(mgcv)
+# this chunk run the model weighting in the elapsed time of the pollen (Majoi) core
+mod1 <- gam(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+            data = interpolatedData, method = "REML", 
+            weights = elapsedTime_ti / mean(elapsedTime_ti),
+            select = TRUE, family = gaussian(link="identity"),
+            na.action = na.omit,
+            knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+pacf(residuals(mod1)) # indicates AR1
+plot(mod1, page=1, scale = 0)
+gam.check(mod1)
+summary(mod1)
+
+# this chunk run the model weighting in the elapsed time of the diatom core
+mod2 <- gam(diatPrC ~ s(Age, k=15) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+            data = interpolatedData, method = "REML", 
+            weights = elapsedTime_diat / mean(elapsedTime_diat),
+            select = TRUE, family = gaussian(link="identity"),
+            na.action = na.omit,
+            knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) 
+
+pacf(residuals(mod2)) # indicates non AR1
+plot(mod2, page=1, scale=0)
+gam.check(mod2)
+summary(mod2)
+
+
+
+#accounting for temporal autocorrelation
+mod1.car <- gamm(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+                 data = interpolatedData, method = "REML", 
+                 weights = elapsedTime/ mean(elapsedTime),
+                 family = gaussian(link="identity"),
+                 correlation = corCAR1(form = ~ Age),
+                 knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+
+pacf(residuals(mod1.car$lme)) # indicates AR1
+
+plot(mod1.car$gam, page=1, scale = 0)
+summary(mod1.car$gam)
+gam.check(mod1.car$gam)
+
+
+#Compare different model fits using AIC
+AIC_table <- AIC(mod1, mod2)%>%
+  rownames_to_column(var= "Model")%>%
+  mutate(data_source = rep(c("diatom_data")))%>%
+  group_by(data_source)%>%
+  mutate(deltaAIC = AIC - min(AIC))%>%
+  ungroup()%>%
+  dplyr::select(-data_source)%>%
+  mutate_at(.vars = vars(df,AIC, deltaAIC), 
+            .funs = funs(round,.args = list(digits=0)))
+
+AIC_table
+
+# Predict GAM
+## data to predict at
+#Check NAs and remove rows
+row.has.na <- apply(interpolatedData, 1, function(x){any(is.na(x))})
+sum(row.has.na)
+interpolatedData <- interpolatedData[!row.has.na,]
+
+## Predict
+predGam <- cbind(interpolatedData, 
+                 data.frame(predict.gam(mod1, interpolatedData, 
+                                        type = "terms" , se.fit = TRUE)))
+
+#plot
+var <- predGam$fit.s.agropastPrC.
+se.var <- predGam$se.fit.s.agropastPrC.
+
+predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var), alpha = 0.1)) +
+  #scale_x_reverse() +
+  labs(y = "Diatom GAM PrC", x = "Cal yr BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  ggtitle(expression("Agropastoralism" %->% "Diatoms"))
+
+predGamPlt
+
+ggsave("outputs/diatomPrC_GAM_covariates.png",
+       plot = predGamPlt ,
+       width = 10,
+       height=8,
+       units="in",
+       dpi = 400)
+
+
+
+
 # Read pollen ratios (Majoi's data)
 llaviucu_ratios <- read.csv("data/llaviucu_pollen.csv")  %>%
   mutate(Age = age*(-1)+1950) %>%

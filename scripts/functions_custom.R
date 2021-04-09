@@ -69,6 +69,36 @@ acfTest = function(x, y.model){
 }
 
 
+# -----------------------------------------------------------------------------
+# Function for binning samples in core.
+# -----------------------------------------------------------------------------
+
+binFunc = function(xDF, Ages, binWidth, minBin, maxBin){
+  
+  coreMat = xDF
+  
+  coreBin = seq(minBin, maxBin, binWidth)
+  sampleBin = vector("list", length(coreBin)-1)
+  
+  for(i in 1:length(sampleBin)){
+    toBin = which(Ages>=coreBin[i] & Ages<coreBin[i+1])
+    sampleBin[[i]] = coreMat[toBin,]
+  }
+  
+  coreRes = matrix(NA, ncol=ncol(xDF), nrow=length(sampleBin))
+  if(ncol(xDF) > 1) {
+    for(i in 1:length(sampleBin)) coreRes[i,] = apply(sampleBin[[i]], 2, function(x)mean(x, na.rm=T))
+  } else { 
+    for(i in 1:length(sampleBin)) coreRes[i,] = mean(sampleBin[[i]], na.rm=T)
+  }
+  colnames(coreRes) = colnames(xDF)
+  rownames(coreRes) = coreBin[-1]
+  
+  coreRes <- as.data.frame(coreRes)
+  coreRes
+  
+}
+
 
 
 #FUNCTION TO SCALE DATA
@@ -123,8 +153,8 @@ interpolateDatasets<-function(datasets.list, age.column.name, interpolation.time
       interpolation.formula = as.formula(paste(column.to.interpolate, "~", age.column.name, sep=" "))
 
       #iteration through span values untill R-squared equals 1
-      span.values=seq(0.024, -0.0000024, by=-0.000024)
-      #span.values=seq(40, -4, by=-0.4)
+      #span.values=seq(0.01, -0.000001, by=-0.000001) #original code span values should take at least n rows
+      span.values=seq(60, -0.650, by=-0.650) #for pollen (&agropastoralism) PrC data
       for(span in span.values){
         interpolation.function = loess(interpolation.formula, data=temp, span=span, control=loess.control(surface="direct"))
 
@@ -195,14 +225,14 @@ backwardLags <- function(lags, reference.data, data.to.lag){
     
     #diat.case.age.plus.lags=round((diat.case.age + (diff(pollen$age)[1] * max(lags))), 2)
     diat.case.age.plus.lags=round((diat.case.age + (diff(agropastolarism$age)[1] * max(lags))), 2)
-    
+
     #if beyond maximum age
     if (diat.case.age.plus.lags > max(pollen$age)){break}
     #if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
     
     #get from pollen the lines with age > age.diatoms && age <= age.diatoms + lags
-    #pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
-    pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    #pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
     
     #put the data together
     pollen.temp=data.frame(diatom_deriv=diat.value, pollen_deriv=pollen.temp, lag=lags)
@@ -223,7 +253,7 @@ backwardLags <- function(lags, reference.data, data.to.lag){
   lags.column=lag.data$lag
   
   #standardize
-  #lag.data=scale(lag.data[, c("diatom_deriv", "pollen_deriv")])
+  lag.data=scale(lag.data[, c("diatom_deriv", "pollen_deriv")])
   
   #add lag
   lag.data=data.frame(lag.data, lag=lags.column)
@@ -310,6 +340,7 @@ modelLagData <- function(model.formula, lagged.data){
   output.df$R2 = as.data.frame(do.call(rbind, results.list.R2))$V1
   #output.df$lag=output.df$lag*10
   output.df$lag=output.df$lag*24 #temporal resolution
+  #output.df$lag=output.df$lag*60 #temporal resolution
   
 
   #se of coefficients
