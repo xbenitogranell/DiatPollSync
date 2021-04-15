@@ -1,4 +1,4 @@
-#code for analyze Lake Llaviucu pollen data with PrC and GAM
+#code for analyze Lake Llaviucu pollen and diatom PrC data with GAM
 
 # load libraries for functions used
 library(tidyverse)
@@ -8,7 +8,6 @@ library(analogue)
 library(ggplot2)
 library(cowplot)
 library(gratia)
-
 
 
 ### fit GAM Gausian Location-Scale model
@@ -130,16 +129,16 @@ predAgropastPlt <- ggplot(predAgropast, aes(x = Age, y = fitted, group = term)) 
   geom_line() +
   facet_wrap(~ term, nrow = 2, labeller = label_parsed, scales = "free_y") +
   scale_x_reverse() +
-  labs(y = "Fitted", x = "Age", title = "Pollen (agrospastolarism indicators)") +
+  labs(y = "Fitted", x = "Age", title = "Agrospastolarism indicators") +
   theme_classic()
 predAgropastPlt
 
 # combine the three plots
-All <- plot_grid(predDiatPlt, predPollPlt, predAgropastPlt,ncol = 3, align = "hv")
-All
+compositePlot <- plot_grid(predDiatPlt, predPollPlt, predAgropastPlt,ncol = 3, align = "hv")
+compositePlot
 
-ggsave("outputs/llaviucu-diatom-pollen-GAULSS.png",
-       plot = All,
+ggsave("outputs/llaviucu-diatom-pollen-agropast-GAULSS.png",
+       plot = compositePlot,
        width=8,
        height=6,
        units="in",

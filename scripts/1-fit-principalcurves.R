@@ -171,17 +171,23 @@ cores.plot
 ## write this out for use in the GAM modelling script
 saveRDS(df, file = "outputs/PrC-cores-diatoms.rds") #this is including all spp
 
-#############
-## POLLEN PrC
-#############
+#################################
+## POLLEN and AGROPASTORALISM PrC
+#################################
 
 # read data (drop Lycopodium counts)
 pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
   select(everything(), -contains("Lycopodium"))
 
+# Read pollen ratios (Majoi's data) and merge charcoal data
+pollen <- read.csv("data/llaviucu_pollen.csv") %>%
+  select(depth,Charcoal.cc.) %>%
+  left_join(pollen, by="depth")
+
 #select human disturbance pollen taxa
 agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", 
                                 "Alnus", "Cyperaceae", "Cecropia", "Asteracea", "sporormiella")
+
 agropastolarism <- select(pollen, contains(agropastolarism_indicators))
 agropastolarism <- data.frame(sapply(agropastolarism, function(x) as.numeric((x))))
 agropastolarism[is.na(agropastolarism)] <- 0 #Replace NA (if any) by 0
@@ -201,18 +207,27 @@ pollen[is.na(pollen)] <- 0 #Replace NA (if any) by 0
 #llaviucu_pollen <- pollen
 llaviucu_pollen <- agropastolarism
 
-##Calculate relative abundance
+##Calculate relative abundance (only for pollen)
 total <- apply(llaviucu_pollen, 1, sum)
 llaviucu_pollen <- llaviucu_pollen / total * 100
 
-#Select spp 
+#Select spp (only for pollen)
 abund <- apply(llaviucu_pollen, 2, max)
 n.occur <- apply(llaviucu_pollen>0, 2, sum)
 llaviucu_pollen <- llaviucu_pollen[, abund>1 & n.occur >2] #more than 3% of RA and present in >2 samples
 
 
-# Run Principal Curves
+# Transform data to Hellinger form
 core_hell <- decostand(llaviucu_pollen, method="hellinger")
+
+  # Adjust for agropastoralism 
+  n.occur <- apply(core_hell>0, 1, sum)
+  core_hell2 <- core_hell[n.occur>0, ] #more than 3% of RA and present in >2 samples
+  pollen.prc <- prcurve(core_hell2, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
+  cores_prc <- scores(pollen.prc, display = "curve")
+  pollenPrC <- cbind(agedepth[-nrow(agedepth),], cores_prc)
+  
+# Run Principal Curves
 pollen.prc <- prcurve(core_hell, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
 
 ## Extract position on the curve
@@ -228,5 +243,5 @@ pollenPlot
 
 ## save results
 write.csv(pollenPrC, "outputs/pollen-PrC.csv", row.names = FALSE)
-write.csv(pollenPrC, "outputs/agropastoralism-PrC.csv", row.names = FALSE)
+write.csv(pollenPrC, "outputs/agropastoralism-PrC_v2.csv", row.names = FALSE)
 

@@ -320,7 +320,7 @@ AIC_table
 
 #Create synthetic data to predict over a range of ages
 
-## Here the synthetic data to predict should be over the range of diatom ages to get the same ages for the synchronous model
+## Here the synthetic data to predict should be over the range of diatom ages to get the same ages for the synchronous/asynchronous model
 ## see negAge argument
 pollen_plot_data <- with(pollen_data, as_tibble(expand.grid(negAge = seq(min(diat_data$negAge), max(diat_data$negAge)),
                                                             spp = factor(levels(pollen_data$spp)),
@@ -504,6 +504,188 @@ write.csv(deriv_summaries, "outputs/pollen-agropastoralism-derivatives.csv", row
 # save derivative summaries at 24 time steps
 write.csv(deriv_summaries, "outputs/pollen-agropastoralism-derivatives_24timeSteps.csv", row.names = FALSE)
 write.csv(deriv_summaries, "outputs/pollen-natural-derivatives_24timeSteps.csv", row.names = FALSE)
+
+#######################
+## Ti GAM analysis ####
+#######################
+
+# read in XRF Llaviucu data (Majoi=pollen record)
+llaviucu_xrf <- read.csv("data/XRFTransformed3000yrs.csv") %>% rename(age=age_calBP) 
+Ti_xrf <- na.omit(llaviucu_xrf[, c("age", "Ti")]) %>% 
+            mutate(negAge=-age) %>%
+            mutate(logTi=log10(Ti+0.25))
+
+elapsed <- diff(Ti_xrf$age)
+Ti_xrf <- Ti_xrf[-nrow(Ti_xrf),] #remove the last observation
+Ti_xrf$elapsedTime <- elapsed
+
+
+#model GAM: 
+set.seed(10) #set a seed so this is repeatable
+
+Ti_gam <- gam(Ti ~ s(negAge, k=20),  weights = elapsedTime / mean(elapsedTime),
+                    data=Ti_xrf,  select = TRUE, family = nb, 
+                    method = "REML")
+
+pacf(residuals(Ti_gam)) # indicates AR1
+plot(Ti_gam, scale = 0)
+gam.check(Ti_gam)
+summary(Ti_gam)
+
+
+## Here the synthetic data to predict should be over the range of diatom ages to get the same ages for the synchronous/asynchronous model
+## see negAge argument
+ti_plot_data <- with(Ti_xrf, 
+                     as_tibble(expand.grid(negAge = seq(min(diat_data$negAge), max(diat_data$negAge)))))
+                                                            
+
+# Predict over the range of new values
+Ti_mod_fit <- predict(Ti_gam, 
+                           newdata = ti_plot_data,
+                           se.fit = TRUE)
+
+
+#
+ti_plot_data$mod_fit <- as.numeric(Ti_mod_fit$fit)
+
+
+# For one model only
+ti_plot_data <- gather(ti_plot_data, key=model, value=fit, mod_fit)
+ti_plot_data <- mutate(ti_plot_data, se= c(as.numeric(Ti_mod_fit$se.fit)),
+                           upper = exp(fit + (2 * se)),
+                           lower = exp(fit - (2 * se)),
+                           fit   = exp(fit))
+
+# Plot
+theme_set(theme_bw())
+theme_update(panel.grid = element_blank())
+
+Ti_plt <- ggplot(ti_plot_data) +
+  geom_ribbon(aes(x=negAge,
+                  ymin = lower,
+                  ymax = upper,
+                  fill = model),
+              alpha=0.2)+
+  geom_point(data= Ti_xrf, aes(x = negAge, y = Ti), size=0.06) +
+  geom_line(aes(x = negAge, y = fit, color = model))+
+  labs(y = "Ti (counts)", x = "Age (cal yr BP)") +
+  scale_fill_brewer(name = "", palette = "Dark2") +
+  scale_colour_brewer(name = "",
+                      palette = "Dark2")+
+  theme(legend.position = "top",
+        strip.text = element_text(size=10))
+
+Ti_plt
+
+# Save plot
+ggsave("outputs/Ti_gam_model.png",
+       plot = Ti_plt ,
+       width = 10,
+       height=8,
+       units="in",
+       dpi = 400)
+
+
+
+##Derivatives and posterior distribution simulation
+#Function for calculating first derivatives of time series given a before,
+#after, and delta step size
+calc_1st_deriv = function(fit_before, fit_after,delta) {
+  (fit_after-fit_before)/(2*delta)
+}
+
+set.seed(10) #set a seed so this is repeatable
+n_sims = 250
+
+n_length = 140
+
+years <- seq(min(ti_plot_data$negAge),
+             max(ti_plot_data$negAge),
+             length.out = n_length)
+
+model <- Ti_gam
+pred <- Ti_mod_fit
+
+# Generate multivariate normal simulations of model coefficients
+random_coefs <- t(rmvn(n_sims, mu = coef(model),V = vcov(model)))
+
+confint_sims <- crossing(negAge = seq(min(ti_plot_data$negAge),
+                                      max(ti_plot_data$negAge),
+                                      length.out = n_length))
+
+map_pred_sims <- predict(model,
+                         confint_sims,
+                         type = "lpmatrix") %*% random_coefs %>%
+  as_data_frame() %>%
+  bind_cols(confint_sims)%>%
+  gather(key = simulation, value = pred, -negAge)
+
+
+#specifying the step size for numerical derivative calculations
+delta = 0.01
+
+#calculating the predicted value for the current year plus delta
+step_ahead_fits = confint_sims %>%
+  mutate(negAge = negAge+delta)%>%
+  predict(model, 
+          ., type = "lpmatrix") %*% random_coefs 
+
+
+#calculating the predicted value for the current year minus delta
+step_behind_fits = confint_sims %>%
+  mutate(negAge = negAge-delta)%>%
+  predict(model,
+          ., type = "lpmatrix") %*% random_coefs 
+
+
+#using the predicted values for year plus and minus delta to calculate
+#derivatives for each species for each simulation
+derivs <- calc_1st_deriv(step_behind_fits,step_ahead_fits,delta = delta)%>%
+  as_data_frame()%>%
+  bind_cols(confint_sims)%>%
+  gather(key = simulation,value = deriv, -negAge)
+
+#Creating summaries of derivatives for each simulation for each year
+deriv_summaries <- derivs %>%
+  group_by(negAge)%>%
+  summarize(deriv_mean = mean(deriv),
+            deriv_sd = sd(deriv))%>%
+  group_by(negAge)%>% #turning derivative summaries into 95% confidence intervals
+  #select(-simulation)%>%
+  summarize_all(.funs = list(lower = ~quantile(.,probs = 0.025),
+                             upper = ~quantile(.,probs = 0.975),
+                             med   = ~quantile(.,probs = 0.5)))
+
+#Plotting mean rate of change plus the 95% CI
+mean_plot <- deriv_summaries %>%
+  ggplot(aes(x = negAge, 
+             y = deriv_mean_med, 
+             ymin = deriv_mean_lower,
+             ymax = deriv_mean_upper))+
+  geom_ribbon(fill="grey")+
+  geom_line()+
+  geom_hline(yintercept = 0, linetype=2) +
+  scale_y_continuous("")+
+  xlab("Cal years BP") +
+  theme_bw()
+mean_plot 
+
+#Plotting standard deviation of rate of change plus the 95% CI
+sd_plot <- deriv_summaries %>%
+  ggplot(aes(x = negAge, 
+             y = deriv_sd_med, 
+             ymin=deriv_sd_lower,
+             ymax=deriv_sd_upper))+
+  geom_ribbon(fill="grey")+
+  geom_line()+
+  geom_hline(yintercept = 0, linetype=2) +
+  scale_y_continuous("")+
+  xlab("Cal years BP") +
+  theme_bw()
+sd_plot
+
+# Save derivative results
+write.csv(deriv_summaries, "outputs/Ti-gam-derivatives_24timeSteps.csv", row.names = FALSE)
 
 
 ## Read HGAM-derivatives results for plotting

@@ -1,17 +1,15 @@
+## Model temporal contributions of pollen and agrospatoralism PrC and Ti on diatom PrC
 
-#loading functions (from Blas Benito) https://github.com/BlasBenito/BaleFire 
-#source("scripts/functions.R")
 library(tidyverse)
 
-
-## Model temporal contributions of pollen PrC and Ti on diatom PrC
+# Read in the interpolated dataset of Ti, pollen and agropastoralism data on diatom record
 interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
-
 
 # model temporal contributions of the covariates to diatom PrC
 library(mgcv)
+
 # this chunk run the model weighting in the elapsed time of the pollen (Majoi) core
-mod1 <- gam(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+mod1 <- gam(diatPrC ~ s(Age, k=20) + s(Ti, k=10, bs="ad") + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_ti / mean(elapsedTime_ti),
             select = TRUE, family = gaussian(link="identity"),
@@ -24,7 +22,7 @@ gam.check(mod1)
 summary(mod1)
 
 # this chunk run the model weighting in the elapsed time of the diatom core
-mod2 <- gam(diatPrC ~ s(Age, k=15) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+mod2 <- gam(diatPrC ~ s(Age, k=20) + s(Ti, k=15, bs="ad") + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_diat / mean(elapsedTime_diat),
             select = TRUE, family = gaussian(link="identity"),
@@ -39,9 +37,9 @@ summary(mod2)
 
 
 #accounting for temporal autocorrelation
-mod1.car <- gamm(diatPrC ~ s(Age, k=10) + s(Ti) + s(pollenPrC) + s(agropastPrC, k=15),
+mod1.car <- gamm(diatPrC ~ s(Age, k=20) + s(Ti) + s(pollenPrC) + s(agropastPrC),
                  data = interpolatedData, method = "REML", 
-                 weights = elapsedTime/ mean(elapsedTime),
+                 weights = elapsedTime_ti/ mean(elapsedTime_ti),
                  family = gaussian(link="identity"),
                  correlation = corCAR1(form = ~ Age),
                  knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages

@@ -173,8 +173,7 @@ interpolateDatasets<-function(datasets.list, age.column.name, interpolation.time
       interpolation.formula = as.formula(paste(column.to.interpolate, "~", age.column.name, sep=" "))
 
       #iteration through span values untill R-squared equals 1
-      #span.values=seq(0.01, -0.000001, by=-0.000001)
-      span.values=seq(40, -4, by=-0.4)
+      span.values=seq(0.01, -0.000001, by=-0.000001)
       for(span in span.values){
 
         interpolation.function = loess(interpolation.formula, data=temp, span=span, control=loess.control(surface="direct"))
@@ -298,8 +297,7 @@ backwardLags <- function(lags, reference.data, data.to.lag){
 
     #get the age of the replicated line
     erica.case.age=erica[erica.case, "age"]
-    #erica.case.age.plus.lags=round((erica.case.age + (0.01 * max(lags))), 2)
-    erica.case.age.plus.lags=round((erica.case.age + (diff(pollen$age)[1] * max(lags))), 2)
+    erica.case.age.plus.lags=round((erica.case.age + (0.01 * max(lags))), 2)
 
     #if beyond maximum age
     if (erica.case.age.plus.lags > max(char.interpolated$age)){break}
