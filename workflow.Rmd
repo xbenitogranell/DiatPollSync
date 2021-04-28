@@ -1,0 +1,465 @@
+---
+title: "Paper Diatom-Pollen-Coupling"
+author: "XBenito"
+date: "15/4/2021"
+output: word_document
+---
+
+```{r setup, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, results="hide"}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Workflow of the main numerical analyses. This document shows the most relevant code. See R files within the folder "scripts" for a more specific code.
+
+# Study area and datasets description
+**Lake Llaviucu**: morrained-dammed tropical Lake located in Ecuador (Cajas National Park), at 3115 m of elevation.
+Two sediment cores: 
+  - **Diatom**: 3-m core covering the last ca 3,000 years, and sampled at 1-cm intervals for diatom analysis [Benito et al. 2021 L&O] (https://aslopubs.onlinelibrary.wiley.com/doi/full/10.1002/lno.11747) 
+  - **Pollen**: 11.9-m core covering the last 14,000 years, and sampled at 1-cm intervals for pollen, charcoal and Sporiormella analyses [Nascimiento et al. 2020 QSR] (https://www.sciencedirect.com/science/article/abs/pii/S0277379120304339?via%3Dihub)
+
+
+# Step 1: Calculate Principal Curves of the diatom record
+```{r}
+library(analogue)
+library(tidyverse)
+
+#read diatom core datasets
+mergedCores <- read.csv("data/mergedCores_counts4.csv") #this is a dataframe with absolute counts 
+
+agedepth <- mergedCores[, names(mergedCores) %in% c("depth", "upper_age", "lower_age", "lake")]
+diat <- mergedCores[, !names(mergedCores) %in% c("depth", "upper_age", "lower_age", "lake")]
+diat[is.na(diat)] <- 0
+
+diatoms_save <- cbind(agedepth, diat)
+
+changes <- read.csv("data/old_new_nms_cores_counts.csv", stringsAsFactors = FALSE)
+#new1: ecological groups
+#new2: harmonized taxonomic names
+
+#this is to transform to tidy format, calculate % and subset more common species
+new <- diatoms_save %>% 
+  gather(key = taxa, value = count, -depth, -upper_age, -lower_age, -lake) %>%
+  mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_2)) %>%
+  group_by(depth, taxa, lake, upper_age, lower_age) %>%
+  summarise(count = sum(count)) %>%
+  filter(!count == "0" ) %>% #this is to remove empty samples (rows)
+  filter(!upper_age==0.0) %>% #this is to drop extraneous ages
+  ungroup() %>%
+  group_by(depth, lake) %>%
+  mutate(relative_abundance_percent = count / sum(count) * 100) %>%
+  ungroup()
+
+# filter more abundant taxa; format need to be on long-wide format-->no spreaded 
+core_common_taxa <- new %>%
+  group_by(taxa) %>%
+  summarise(max_rel_abund = max(relative_abundance_percent)) %>%
+  filter(max_rel_abund >= 5) %>%
+  arrange(max_rel_abund) %>%
+  pull(taxa)
+
+# select from initial table
+core_counts_common <- new %>%
+  filter(taxa %in% core_common_taxa) %>%
+  mutate(taxa = factor(taxa, levels = core_common_taxa)) %>%
+  arrange(taxa)
+
+#make it wide
+core_counts_wide <- core_counts_common %>%
+  select(depth, lake, upper_age, lower_age, taxa, relative_abundance_percent) %>%
+  spread(key = taxa, value = relative_abundance_percent) 
+
+## split cores by lakes and reassemble
+coresList <- split(core_counts_wide, core_counts_wide$lake)
+
+# Extract LLaviucu diatom dataset
+llaviucu_diatoms <- as.data.frame(coresList[["llaviucu"]])
+llaviucu_diatoms[is.na(llaviucu_diatoms)] <- 0
+
+## extract agedepth variables
+agedepth <- llaviucu_diatoms[,names(llaviucu_diatoms) %in% c("depth", "lake", "upper_age", "lower_age")]
+llaviucu_diatoms <- llaviucu_diatoms[,!names(llaviucu_diatoms) %in% c("depth", "lake", "upper_age", "lower_age")]
+
+#Select most abundant and common species
+abund <- apply(llaviucu_diatoms, 2, max)
+n.occur <- apply(llaviucu_diatoms>0, 2, sum)
+llaviucu_diatoms <- llaviucu_diatoms[, abund>1 & n.occur >2] #more than 1% of RA and present in >2 samples
+
+# Combine dataframe with ages and depths
+llaviucu_diatoms <- cbind(agedepth, llaviucu_diatoms)
+
+# Save Diatom data RA
+write.csv(llaviucu_diatoms, "data/diatomsRA.csv")
+
+# Function to fit principal curves
+fitPcurve <- function(i, cores, axis, method, ...) {
+  axis <- axis[i]
+  core <- cores[[i]]
+  method <- method[i]
+  core <- core[ , -which(names(core) %in% c("depth","upper_age", "lower_age", "lake"))] # drop year & depths vars
+  core[is.na(core)] <- 0
+  core <- core[, colSums(core) > 0] #select only present species
+  core <- decostand(core, method="hellinger") #Hellinger transform relative abundance data
+  prc <- prcurve(core, vary = TRUE, trace = TRUE, method = method,
+                 axis = axis)
+  prc
+}
+
+## apply fitCurve  function to each core
+axis <- c(1, 1, 1, 1, 1, 1, 1, 1) 
+method <- c(rep("ca", 8)) 
+
+corePRC <- lapply(seq_along(coresList), fitPcurve,
+                  cores = coresList, axis = axis, method = method)
+names(corePRC) <- names(coresList)
+
+# extract data from list
+scrs <- lapply(corePRC, scores)
+scrs <- lapply(scrs, `[`, , 1)
+len <- lapply(scrs, length)
+nams <- names(scrs)
+depths <- lapply(coresList, `[`, , "depth")
+age <- lapply(coresList, `[`, ,  "upper_age")
+upper_age <- lapply(coresList, `[`, ,  "upper_age")
+lower_age <- lapply(coresList, `[`, ,  "lower_age")
+df <- data.frame(Lake = rep(nams, times = len),
+                 PrC  = unlist(scrs),
+                 Depth = unlist(depths),
+                 Age = unlist(age),
+                 negAge = - unlist(age),
+                 upper_age = unlist(upper_age),
+                 lower_age = unlist(lower_age))
+rownames(df) <- NULL
+
+#Plot Llaviucu diatom PrC
+cores.plot <- ggplot(df[df$Lake=="llaviucu",], aes(x = Age, y = PrC)) +
+  geom_point() + geom_line() +
+  #coord_flip() +
+  facet_wrap(Lake~., scales = "free")
+cores.plot
+
+## write this out for use in the GAM modelling script
+saveRDS(df, file = "outputs/PrC-cores-diatoms.rds") #this is including all spp
+
+```
+
+# Step 2: Fit Principal Curves to pollen record
+```{r principal curves, size="small", results="hide", message=FALSE, error=FALSE, warning=FALSE, echo="FALSE"}
+
+# read Pollen data (drop Lycopodium counts)
+pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
+  select(everything(), -contains("Lycopodium"))
+
+#select human disturbance pollen taxa
+agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", 
+                                "Alnus", "Cyperaceae", "Cecropia", "Asteracea", "sporormiella")
+
+# Create dataframe with agropastoralism taxa
+agropastolarism <- select(pollen, contains(agropastolarism_indicators))
+agropastolarism <- data.frame(sapply(agropastolarism, function(x) as.numeric((x))))
+agropastolarism[is.na(agropastolarism)] <- 0 #Replace NA (if any) by 0
+
+#drop agropastoralism indicators from pollen dataset
+pollen <- pollen %>%  select(everything(), -contains(agropastolarism_indicators))
+
+## extract agedepth variables
+agedepth <- pollen[,names(pollen) %in% c("depth", "upper_age", "lower_age")]
+pollen <- pollen[,!(names(pollen) %in% c("upper_age", "lower_age", "depth"))]
+
+pollen <- data.frame(sapply(pollen, function(x) as.numeric((x))))
+pollen[is.na(pollen)] <- 0 #Replace NA (if any) by 0
+
+## assign dataframe to analyze
+llaviucu_pollen <- pollen
+
+##Calculate relative abundance (only for pollen)
+total <- apply(llaviucu_pollen, 1, sum)
+llaviucu_pollen <- llaviucu_pollen / total * 100
+
+#Select spp (only for pollen)
+abund <- apply(llaviucu_pollen, 2, max)
+n.occur <- apply(llaviucu_pollen>0, 2, sum)
+llaviucu_pollen <- llaviucu_pollen[, abund>2 & n.occur >2] #more than 3% of RA and present in >2 samples
+
+# Combine dataframe with ages and depths
+llaviucu_pollen <- cbind(agedepth, llaviucu_pollen)
+
+#Save pollen data
+write.csv(llaviucu_pollen, "data/pollenRA.csv")
+
+# Transform data to Hellinger form
+core_hell <- decostand(llaviucu_pollen, method="hellinger")
+
+# Run Principal Curves
+pollen.prc <- prcurve(core_hell, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
+
+## Extract position on the curve
+cores_prc <- scores(pollen.prc, display = "curve")
+
+# Combine dataframe with ages and depths
+pollenPrC <- cbind(agedepth, cores_prc)
+
+# Plot Pcurves with depth and ages
+pollenPlot <- ggplot(pollenPrC, aes(x = upper_age, y = PrC)) +
+  geom_line() + geom_point() +
+  labs(y = "Pollen PrC", x = "Age (cal yr BP)", title = "")
+
+pollenPlot
+
+# Save results
+write.csv(pollenPrC, "outputs/pollen-PrC.csv", row.names = FALSE)
+
+## assign dataframe to analyze
+llaviucu_pollen <- agropastolarism
+
+# Transform data to Hellinger form
+core_hell <- decostand(llaviucu_pollen, method="hellinger")
+
+# Adjust for agropastoralism 
+n.occur <- apply(core_hell>0, 1, sum)
+core_hell2 <- core_hell[n.occur>0, ] #one single row has rowSums=0; remove it
+
+# Run Principal Curves and extract scores for then combining the resulting dataframe with agedepth
+pollen.prc <- prcurve(core_hell2, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
+cores_prc <- scores(pollen.prc, display = "curve")
+AgropastPrC <- cbind(agedepth[-nrow(agedepth),], cores_prc)
+  
+## save results
+write.csv(pollenPrC, "outputs/agropastoralism-PrC.csv", row.names = FALSE)
+
+# Plot Pcurves with depth and ages
+AgropastPlot <- ggplot(AgropastPrC, aes(x = upper_age, y = PrC)) +
+  geom_line() + geom_point() +
+  labs(y = "Agropastoralism PrC", x = "Age (cal yr BP)", title = "")
+AgropastPlot
+
+```
+
+
+# Step 3: Interpolation of diatom into pollen record
+Diatom and pollen records come from two different sediment cores. In order to facilitate comparison we matched ages of diatom samples into pollen and Titanium (as indicator of terrigenous input) record. The final dataset includes a common age column containing Principal curves for diatom, pollen, and agropastoralism, and Ti time series. 
+
+```{r interpolation, message=FALSE, error=FALSE, results="hide", size="small"}
+library(tidyverse)
+
+# read in XRF Llaviucu data (pollen record)
+llaviucu_xrf <- read.csv("data/XRFTransformed3000yrs.csv") %>% rename(age=age_calBP) 
+Ti_xrf <- na.omit(llaviucu_xrf[, c("age", "Ti")])
+
+# read pollen data (drop Lycopodium counts)
+pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
+  select(everything(), -contains("Lycopodium"))
+
+#read in Charcoal data
+charcoal <- read.csv("data/llaviucu_pollen.csv") %>%
+  select(depth,Charcoal.cc.) %>%
+  left_join(pollen, by="depth") %>%
+  select(depth, Charcoal.cc., upper_age, lower_age) %>%
+  na.omit() %>%
+  mutate(zscores=(Charcoal.cc. - mean(Charcoal.cc.))/sd(Charcoal.cc.))
+
+
+## read in PrC datasets: diatom, pollen and agropastoralism
+diatomPrC <- readRDS("outputs/PrC-cores-diatoms.rds") %>%
+  filter(Lake=="llaviucu") %>%
+  mutate(elapsedTime = abs(upper_age - lower_age)) 
+
+## Pollen PrC
+pollenPrC <- read.csv("outputs/pollen-PrC.csv") %>%
+  mutate(Age=upper_age) %>%
+  mutate(elapsedTime = abs(upper_age - lower_age)) 
+pollenPrC <- pollenPrC[order(pollenPrC$Age),] #order time
+
+## Agropastoralism PrC
+agropastPrC <- read.csv("outputs/agropastoralism-PrC.csv") %>%
+  mutate(Age=upper_age) %>%
+  mutate(elapsedTime = abs(upper_age - lower_age)) 
+agropastPrC <- agropastPrC[order(agropastPrC$Age),] #order time
+
+#Arrange diatom PrC in time order
+diatomPrC <- diatomPrC[order(diatomPrC$Age),] #order time
+diatomPrC <- na.omit(diatomPrC[, c("Age", "PrC", "elapsedTime")])
+diatomPrC$Age <- round(diatomPrC$Age, 1)
+mean(diff(diatomPrC$Age))
+
+# linear interpolation diatom ~ Ti (pollen record)
+Ti_diat_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, diatomPrC$Age)$y)
+Ti_diat_prc_i$age <- diatomPrC$Age
+colnames(Ti_diat_prc_i) <- c("Ti", "age")
+Ti_diat_prc_i$diat_prc <- diatomPrC$PrC #add PrC data
+diff(Ti_diat_prc_i$age) #check temporal resolution
+Ti_diat_prc_i$elapsedTime <- diatomPrC$elapsedTime #add sample age
+
+# linear interpolation diatom ~ charcoal (pollen record)
+charc_diat_prc_i <- as.data.frame(approx(charcoal$upper_age, charcoal$Charcoal.cc., diatomPrC$Age)$y)
+charc_diat_prc_i$age <- diatomPrC$Age
+colnames(charc_diat_prc_i) <- c("charcoal", "age")
+charc_diat_prc_i$diat_prc <- diatomPrC$PrC #add PrC data
+diff(charc_diat_prc_i$age) #check temporal resolution
+
+
+# linear interpolation pollen ~ Ti
+Ti_pollen_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, pollenPrC$Age)$y)
+Ti_pollen_prc_i$age <- pollenPrC$Age
+colnames(Ti_pollen_prc_i) <- c("Ti", "age")
+Ti_pollen_prc_i$pollen_prc <- pollenPrC$PrC #add PrC data
+Ti_pollen_prc_i$elapsedTime <- pollenPrC$elapsedTime #check temporal resolution
+
+
+# linear interpolation agropastoralism ~ Ti
+Ti_agropast_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, agropastPrC$Age)$y)
+Ti_agropast_prc_i$age <- agropastPrC$Age
+colnames(Ti_agropast_prc_i) <- c("Ti", "age")
+Ti_agropast_prc_i$agrospast_prc <- agropastPrC$PrC
+
+# Merge all datasets
+interpolatedData <- as.data.frame(cbind(Ti_diat_prc_i$age, Ti_diat_prc_i$Ti,
+                          charc_diat_prc_i$charcoal,
+                          Ti_pollen_prc_i$elapsedTime, #elapsed time in equal time resolution than Ti
+                          Ti_diat_prc_i$elapsedTime, #elapsed time in equal time resolution than diatoms
+                          Ti_diat_prc_i$diat_prc,
+                          Ti_pollen_prc_i$pollen_prc, Ti_agropast_prc_i$agrospast_prc))
+
+colnames(interpolatedData) <- c("Age", "Ti", "charcoal", "elapsedTime_ti", "elapsedTime_diat", "diatPrC", "pollenPrC", "agropastPrC")
+
+# save data
+write.csv(interpolatedData, "outputs/principalcurves_ti_interp.csv")
+```
+
+# Visualization of Lake Llaviucu proxies
+Here we generate an stacked plot of the time series
+```{r summaryPlots}
+# read data
+df <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1]
+str(df)
+
+# Plot stacked time series
+data_plt <- df %>% 
+  gather(key = proxy, value = var, -Age, -elapsedTime_ti, -elapsedTime_diat)
+
+plt <- ggplot(data_plt, aes(x=Age, y=var))+
+  geom_line() +
+  facet_grid(vars(proxy), scales = "free") +
+  labs(y = "", x = "Age (cal yr BP)", title = "")
+plt
+
+# Save plot
+ggsave("outputs/stackedTS.png",
+       plot = plt ,
+       width = 10,
+       height=8,
+       units="in",
+       dpi = 400)
+
+```
+
+
+# Step 4: Fit PrC-GAMs 
+In this step we model diatom PrC as function of pollen, agropastoralism and Ti with Generalized Additive Models (GAMs). We then extract predicted values to test the temporal contribution of covariates to explain drivers of diatom assemblage change.
+
+```{r prc-gam, message=FALSE, error=FALSE, results="hide", size="small"}
+library(mgcv)
+library(tidyverse)
+library(ggplot2)
+
+# Read in the interpolated dataset of Ti, pollen and agropastoralism data on diatom record
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1] %>%
+  mutate(sample_age_mean=(elapsedTime_ti+elapsedTime_diat)/2) #average sample ages of pollen and diatom records
+
+# this chunk run the model weighting in the elapsed time of the pollen record
+mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(charcoal) + s(Ti) +
+              s(pollenPrC) + s(agropastPrC),
+            data = interpolatedData, method = "REML", 
+            weights = elapsedTime_diat / mean(elapsedTime_diat),
+            select = TRUE, family = gaussian(link="identity"),
+            na.action = na.omit,
+            knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+plot(mod1, page=1, scale = 0)
+gam.check(mod1)
+summary(mod1)
+
+#Check temporal autocorrelation of the residuals
+pacf(residuals(mod1)) # indicates AR1
+
+#accounting for temporal autocorrelation (note basis function with adaptative splines are not possible)
+mod1.car <- gamm(diatPrC ~ s(Age, k=40) + s(Ti) + s(charcoal) + s(Ti) +
+                 s(pollenPrC) + s(agropastPrC),
+                 data = interpolatedData, method = "REML", 
+                 weights = elapsedTime_diat/ mean(elapsedTime_diat),
+                 family = gaussian(link="identity"),
+                 correlation = corCAR1(form = ~ Age),
+                 knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
+
+# Check model fit
+pacf(residuals(mod1.car$lme))
+plot(mod1.car$gam, page=1, scale = 0)
+summary(mod1.car$gam)
+gam.check(mod1.car$gam)
+
+
+#Compare different model fits using AIC
+AIC_table <- AIC(mod1, mod1.car$lme)%>%
+  rownames_to_column(var= "Model")%>%
+  mutate(data_source = rep(c("diatom_data")))%>%
+  group_by(data_source)%>%
+  mutate(deltaAIC = AIC - min(AIC))%>%
+  ungroup()%>%
+  dplyr::select(-data_source)%>%
+  mutate_at(.vars = vars(df,AIC, deltaAIC), 
+            .funs = funs(round,.args = list(digits=0)))
+
+AIC_table
+
+
+# Predict GAM
+#Check NAs and remove rows
+row.has.na <- apply(interpolatedData, 1, function(x){any(is.na(x))})
+sum(row.has.na)
+interpolatedData <- interpolatedData[!row.has.na,]
+
+## Predict
+predGam <- cbind(interpolatedData, 
+                 data.frame(predict.gam(mod1, interpolatedData, 
+                                        type = "terms" , se.fit = TRUE)))
+
+#Select covariates to plot (those having significant effects on the mean values of diatom PrC)
+var <- predGam$fit.s.Ti.
+se.var <- predGam$se.fit.s.Ti.
+
+# Plot temporal contribution of covariates on response 
+predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var), alpha = 0.1)) +
+  #scale_x_reverse() +
+  labs(y = "Diatom GAM PrC", x = "Cal yr BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  ggtitle(expression("Agropastoralism" %->% "Diatoms"))
+
+predGamPlt
+
+# Save plot
+ggsave("outputs/diatomPrC_GAM_covariates.png",
+       plot = predGamPlt ,
+       width = 10,
+       height=8,
+       units="in",
+       dpi = 400)
+
+
+```
+
+# Step 5: Hierarchical Generalized Additive Models (HGAM) 
+In this step we model, first, diatom and pollen assemblages using HGAM and then calculate average rate of change at assemblage-level to assess the timing in the start of ecological change and test comparable rates of change between aquatic and terrestrial ecosystems.
+
+
+By obtaining derivative-based values of the aquatic (diatom) and terrestrial (agropastoralism, pollen, and XRF) time series we obtain regular time intervals at 24-year resolution (median between diatom and pollen records) and hence comparable for the synchronous/asynchronous model. 
+
+```{r HGAM, message=FALSE, error=FALSE, results="hide", size="small"}
+
+```
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

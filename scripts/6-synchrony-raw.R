@@ -10,7 +10,7 @@ source("scripts/functions_custom.R") #functions to lag datasets and model (Blas)
 interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
 
 # Binning samples by categories of ages
-diff(interpolatedData$Age) #this is the temporal resolution among samples of diatom core
+median(diff(interpolatedData$Age)) #this is the temporal resolution among samples of diatom core
 
 #removing samples with temporal resolution older than 60
 #data.reduced <- interpolatedData %>% filter(elapsedTime_diat)
@@ -28,6 +28,80 @@ dataBinned$Age <- rownames(dataBinned)
 #pollen <- dataBinned$pollenPrC
 #agropastolarism <- dataBinned$agropastPrC
 
+# Multivariate ordination of combined datasets
+diatRA <- read.csv("data/diatomsRA.csv")[,-1] %>%
+  select(-lake, -depth, -lower_age) 
+diatRA <- diatRA[order(diatRA$upper_age),] #order time
+diatRA_ages <- diatRA[,"upper_age"]
+diatRA <- diatRA[,!names(diatRA) %in% "upper_age"]
+
+pollenRA <- read.csv("data/pollenRA.csv")[,-1] %>% 
+  select(-depth, -lower_age)
+pollenRA_ages <- pollenRA[,"upper_age"]
+pollenRA <- pollenRA[,!(names(pollenRA) %in% "upper_age")]
+
+agropastoralismRA <- read.csv("data/agropastoralismRA.csv")[,-1] %>% 
+  select(-depth, -upper_age, -lower_age)
+
+#df <- analogue::join(diatRA, pollenRA, agropastoralismRA)
+
+
+
+#make the age categories (60-years bins) and combine the two datasets
+PollenBinned <- binFunc(as.data.frame(pollenRA), as.numeric(pollenRA_ages), 60, 0, 3000) 
+AgropastBinned <- binFunc(as.data.frame(agropastoralismRA), as.numeric(pollenRA_ages), 60, 0, 3000)
+DiatBinned <- binFunc(as.data.frame(diatRA), as.numeric(diatRA_ages), 60, 0, 3000) 
+
+#varBinInter <- na.approx(varBin, na.rm = TRUE) #do interpolation between adjacent samples
+
+combinedData <- cbind(PollenBinned, AgropastBinned, DiatBinned)
+
+
+# Here perform a DCA
+## Look for code that infer NaNs values (zoo package)
+combinedData <- na.omit(combinedData)
+
+diatbin <- combinedData[,colnames(DiatBinned)]
+pollenbin <- combinedData[,colnames(PollenBinned)]
+agropastbin <- combinedData[,colnames(AgropastBinned)]
+
+#full model
+model.dca <- decorana(sqrt(combinedData), iweigh=1)
+summary(model.dca)
+
+scrs <- scores(model.dca, display="sites", choices=1:2)
+plot(model.dca, type="n", xlim=range(scrs[,1]), ylim=range(scrs[,2]))
+
+#individual models
+diat.dca <- decorana(sqrt(diatbin), iweigh=1)
+pollen.dca <- decorana(sqrt(pollenbin), iweigh=1)
+agropast.dca <- decorana(sqrt(agropastbin), iweigh=1)
+
+#plot(diat.dca, display="sites")
+points(scores(diat.dca, display="sites"), col="red", pch=20)
+points(scores(pollen.dca, display = "sites"), col="blue", pch=20)
+points(scores(agropast.dca, display = "sites"), col="orange", pch=20)
+
+par(mar=c(1,1,1,1))
+par(mfrow=c(2,2))
+
+#check individual dca axes limits
+plot(model.dca, display="sites")
+plot(diat.dca, display="sites")
+plot(pollen.dca, display="sites")
+plot(agropast.dca, display="sites")
+
+
+plot(model.dca, type="n", xlim=c(-0.5, 0.5), ylim = c(-0.5, 0.5))
+points(scores(diat.dca, display="sites"), col="red", pch=20)
+points(scores(pollen.dca, display = "sites"), col="blue", pch=20)
+points(scores(agropast.dca, display = "sites"), col="orange", pch=20)
+
+df <- cbind(scores(diat.dca, diplay="sites", choices=1), scores(pollen.dca, display = "sites", choices=1), 
+      scores(agropast.dca, display = "sites", choices=1))
+colnames(df) <- c("diat", "pollen", "agropastoralism")
+
+hist(df)
 
 ################################
 ## Generate time-lagged datasets

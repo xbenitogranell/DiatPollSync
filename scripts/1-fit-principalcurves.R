@@ -1,5 +1,5 @@
 ##loading libraries for functions used
-library(analogue) #to join diatom datasets on their common spp
+library(analogue) #to perform principal curves on species composition data
 library(rioja) #to merge diatom datasets on their common spp
 library(vegan) #to perform multivariate ordination analysis (dca, nmds, rda and varpart)
 library(mgcv) #allow to perform GAM analyses

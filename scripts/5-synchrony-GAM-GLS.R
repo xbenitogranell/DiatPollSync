@@ -16,7 +16,7 @@ derivAll <- read.csv("outputs/Ti-gam-derivatives_24timeSteps.csv") %>%
   bind_rows(derivAll)
 
 #read in Principal curves data interpolated to diatom time visits
-interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
+#interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
     
     #calculate rate of change of Principal Curves
     #interpolatedData <- interpolatedData %>% mutate(rocDiat=diatPrC/elapsedTime_diat) %>%
@@ -34,10 +34,6 @@ colnames(df) <- c("diat_deriv_mean", "diat_sd_mean", "agropast_deriv_mean", "agr
 
 #fitting GLS model without autocorrelated residuals
 diat.agropast.gls <- gls(diat_deriv_mean ~ agropast_deriv_mean, data=df)
-
-  #Fitting GLS model using PrC raw data
-  diat.agropast.gls <- gls(diatPrC ~ agropastPrC, data=interpolatedData)
-
 summary(diat.agropast.gls)
 
 #check autocorrelation of the residuals
@@ -48,30 +44,10 @@ pacf(residuals(diat.agropast.gls)) # indicates AR1
 diat.agropast.gls <- gls(diat_deriv_mean ~ agropast_deriv_mean, 
                          data=df, correlation=corARMA(p=1))
 
-  #fitting GLS model with autocorrelated residuals
-  diat.agropast.gls <- gls(diatPrC ~ agropastPrC, 
-                         data=interpolatedData, correlation=corARMA(p=1))
-
 #pseudo R2 (gls doesn't provide R2)
 diat.agropast.gls.R2 <- cor(df$diat_deriv_mean, 
                           predict(diat.agropast.gls))^2 ##0.42
 
-  #pseudo R2 (gls doesn't provide R2)
-  diat.agropast.gls.R2 <- cor(interpolatedData$diatPrC, 
-                              predict(diat.agropast.gls))^2 
-  
-  interpolatedData$diat.agrost.predicted <- predict(diat.agropast.gls)
-
-  #plotting diatom vs agropastoralism
-  diatoms_agropast_plt <- ggplot(data=interpolatedData, aes(x=agropastPrC, y=diatPrC)) + 
-    geom_point(shape=21, fill="gray50", color="black", size=4, alpha=0.5) +
-    geom_line(aes(x=agropastPrC, y=diat.agrost.predicted), size=2, color="red4", alpha=0.6) +
-    ylab("Diatoms (Rate of Change of Principal Curves)") + 
-    xlab("Agropastoralism-indicators (Rate of Change of Principal Curves)") +
-    ggtitle("Diatoms vs. Agropastoralism") +
-    theme(text=element_text(size=9), plot.title=element_text(size = 12))
-  
-  
 df$diat.agrost.predicted <- predict(diat.agropast.gls)
 
 #plotting diatom vs agropastoralism
@@ -93,31 +69,9 @@ colnames(df) <- c("diat_deriv_mean", "diat_sd_mean", "pollen_deriv_mean", "polle
 diat.pollen.gls <- gls(diat_deriv_mean ~ pollen_deriv_mean, 
                          data=df)
 
-    #fitting GLS model using PrC rate of change
-    diat.pollen.gls <- gls(rocDiat ~ rocPollen, 
-                           data=interpolatedData)
-
 #pseudo R2 (gls doesn't provide R2)
 diat.pollen.gls.R2 <- cor(df$diat_deriv_mean, 
                             predict(diat.pollen.gls))^2 #0.02
-
-    #pseudo R2 (gls doesn't provide R2)
-    diat.pollen.gls.R2 <- cor(interpolatedData$rocDiat, 
-                              predict(diat.pollen.gls))^2 #0.50
-    
-    #adding predicted and residual values to diatom data
-    interpolatedData$diat.pollen.predicted <- predict(diat.pollen.gls)
-    
-    
-    #plotting diatom vs pollen
-    diatoms_pollen_plt <- ggplot(data=interpolatedData, aes(x=rocPollen, y=rocDiat)) + 
-      geom_point(shape=21, fill="gray50", color="black", size=4, alpha=0.5) +
-      geom_line(aes(x=rocPollen, y=diat.pollen.predicted), size=2, color="red4", alpha=0.6) +
-      ylab("Diatoms (rate of change of Principal Curves)") + 
-      xlab("Pollen (rate of change of Principal Curves)") +
-      ggtitle("Diatoms vs. Pollen") +
-      theme(text=element_text(size=9), plot.title=element_text(size = 12))
-    
 
 #adding predicted and residual values to diatom data
 df$diat.pollen.predicted <- predict(diat.pollen.gls)
@@ -169,31 +123,6 @@ all_three_sd_deriv <- plot_grid(diatoms_agropast_plt, diatoms_pollen_plt, pollen
 
 
 # Diatom ~ Ti
-df <- cbind(diat,Ti)
-colnames(df) <- c("diat_deriv_mean", "diat_sd_mean", "Ti_deriv_mean", "Ti_sd_mean")
-
-#fitting GLS model
-diat.ti.gls <- gls(diat_deriv_mean ~ Ti_deriv_mean, 
-                           data=df)
-
-#pseudo R2 (gls doesn't provide R2)
-diat.ti.gls.R2 <- cor(df$diat_deriv_mean, 
-                              predict(diat.ti.gls))^2 #0.004
-
-#adding predicted and residual values to erica.char
-df$diat.ti.predicted <- predict(diat.ti.gls)
-
-#plotting pollen vs agropastoralism
-diatom_Ti_plt <- ggplot(data=df, aes(x=diat_deriv_mean, y=Ti_deriv_mean)) + 
-  geom_point(shape=21, fill="gray50", color="black", size=4, alpha=0.5) +
-  geom_line(aes(x=Ti_deriv_mean, y=diat.ti.predicted), size=2, color="red4", alpha=0.6) +
-  ylab("Agropastoralism-indicators (st. dev of rate of change of log-abundance)")+
-  xlab("Pollen (st. dev of rate of change of log-abundance)") +
-  ggtitle("Diatom  vs. Ti") +
-  theme(text=element_text(size=9), plot.title=element_text(size = 12))
-
-diatom_Ti_plt
-
 ################################
 ## Generate time-lagged datasets
 ################################
@@ -211,13 +140,6 @@ colnames(diat) <- c("diatom_deriv", "age")
 round(diff(diat$age, 1))[1]
 
 
-    ##prepare diatom data of PrC rate of change
-    diat <- interpolatedData %>% select(diatPrC, Age) %>% mutate(age=-Age) %>% data.frame()
-    diat$Age <- NULL
-    diat <- diat[order(diat$age), ]
-    colnames(diat) <- c("diatom_deriv", "age")
-    round(diff(diat$age, 1))[1]
-
 # Pollen
 pollen <- derivAll %>% filter(proxy=="pollen") %>% select(negAge, deriv_mean_med) %>%
   mutate(age=negAge) %>% data.frame()
@@ -228,13 +150,6 @@ colnames(pollen) <- c("pollen_deriv", "age")
 #pollen <- pollen[pollen$age >= 0,]
 round(diff(pollen$age, 1))[1] #check temporal resolution
 
-    #prepare pollen data of PrC rate of change
-    pollen <- interpolatedData %>% select(pollenPrC, Age) %>% mutate(age=-Age) %>% data.frame()
-    pollen$Age <- NULL
-    pollen <- pollen[order(pollen$age),]
-    colnames(pollen) <- c( "pollen_deriv", "age")
-    round(diff(pollen$age, 1))[1]
-
 # Agropastoralism
 agropastolarism <- derivAll %>% filter(proxy=="agropastoralism") %>% select(negAge, deriv_mean_med) %>%
   mutate(age=negAge) %>% data.frame()
@@ -243,13 +158,6 @@ agropastolarism$negAge <- NULL
 colnames(agropastolarism) <- c("pollen_deriv", "age") #note the change of the column name
 #pollen <- pollen[pollen$age >= 0,]
 round(diff(agropastolarism$age, 1))[1]
-
-    #prepare agropastoralism data of PrC rate of change
-    agropastolarism <- interpolatedData %>% select(agropastPrC, Age) %>% mutate(age=-Age) %>% data.frame()
-    agropastolarism$Age <- NULL
-    agropastolarism <- agropastolarism[order(agropastolarism$age),]
-    colnames(agropastolarism) <- c("pollen_deriv", "age")
-    round(diff(agropastolarism$age, 1))[1]
 
 
 ### Backward lags
