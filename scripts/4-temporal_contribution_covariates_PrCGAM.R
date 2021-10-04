@@ -1,15 +1,14 @@
 ## Model temporal contributions of pollen and agrospatoralism PrC and Ti on diatom PrC
 
+#Load libraries for functions used
 library(tidyverse)
+library(mgcv)
 
 # Read in the interpolated dataset of Ti, pollen and agropastoralism data on diatom record
 interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
 
-# model temporal contributions of the covariates to diatom PrC
-library(mgcv)
-
-# this chunk run the model weighting in the elapsed time of the pollen (Majoi) core
-mod1 <- gam(diatPrC ~ s(Age, k=20) + s(Ti, k=10, bs="ad") + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
+# this chunk run a multivariate GAM weighting in the elapsed time of the pollen (Majoi) core
+mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti, k=10) + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_ti / mean(elapsedTime_ti),
             select = TRUE, family = gaussian(link="identity"),
@@ -20,6 +19,7 @@ pacf(residuals(mod1)) # indicates AR1
 plot(mod1, page=1, scale = 0)
 gam.check(mod1)
 summary(mod1)
+
 
 # this chunk run the model weighting in the elapsed time of the diatom core
 mod2 <- gam(diatPrC ~ s(Age, k=20) + s(Ti, k=15, bs="ad") + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
@@ -211,3 +211,4 @@ predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
   geom_hline(yintercept=0, linetype="dashed")+
   ggtitle("")
 predGamPlt
+

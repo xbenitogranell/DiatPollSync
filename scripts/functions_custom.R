@@ -227,12 +227,12 @@ backwardLags <- function(lags, reference.data, data.to.lag){
     diat.case.age.plus.lags=round((diat.case.age + (diff(agropastolarism$age)[1] * max(lags))), 2)
 
     #if beyond maximum age
-    if (diat.case.age.plus.lags > max(pollen$age)){break}
-    #if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
+    #if (diat.case.age.plus.lags > max(pollen$age)){break}
+    if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
     
     #get from pollen the lines with age > age.diatoms && age <= age.diatoms + lags
-    pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
-    #pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    #pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
     
     #put the data together
     pollen.temp=data.frame(diatom_deriv=diat.value, pollen_deriv=pollen.temp, lag=lags)

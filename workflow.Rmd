@@ -18,7 +18,7 @@ Two sediment cores:
   - **Pollen**: 11.9-m core covering the last 14,000 years, and sampled at 1-cm intervals for pollen, charcoal and Sporiormella analyses [Nascimiento et al. 2020 QSR] (https://www.sciencedirect.com/science/article/abs/pii/S0277379120304339?via%3Dihub)
 
 
-# Step 1: Calculate Principal Curves of the diatom record
+# Step 1: Estimate Principal Curves of the diatom record
 ```{r}
 library(analogue)
 library(tidyverse)
@@ -142,21 +142,29 @@ saveRDS(df, file = "outputs/PrC-cores-diatoms.rds") #this is including all spp
 
 ```
 
-# Step 2: Fit Principal Curves to pollen record
+# Step 2: Estimate Principal Curves of pollen record
 ```{r principal curves, size="small", results="hide", message=FALSE, error=FALSE, warning=FALSE, echo="FALSE"}
 
 # read Pollen data (drop Lycopodium counts)
 pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
   select(everything(), -contains("Lycopodium"))
 
+#read in Charcoal data
+charcoal <- read.csv("data/llaviucu_pollen.csv") %>%
+  select(depth,Charcoal.cc.) %>%
+  left_join(pollen, by="depth") %>%
+  select(depth, Charcoal.cc., upper_age, lower_age) %>%
+  na.omit() 
+
 #select human disturbance pollen taxa
-agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", 
+agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", "Begoniaceae",
                                 "Alnus", "Cyperaceae", "Cecropia", "Asteracea", "sporormiella")
 
 # Create dataframe with agropastoralism taxa
 agropastolarism <- select(pollen, contains(agropastolarism_indicators))
 agropastolarism <- data.frame(sapply(agropastolarism, function(x) as.numeric((x))))
 agropastolarism[is.na(agropastolarism)] <- 0 #Replace NA (if any) by 0
+agropastolarism$charcoal <- charcoal$Charcoal.cc.
 
 #drop agropastoralism indicators from pollen dataset
 pollen <- pollen %>%  select(everything(), -contains(agropastolarism_indicators))
@@ -178,7 +186,7 @@ llaviucu_pollen <- llaviucu_pollen / total * 100
 #Select spp (only for pollen)
 abund <- apply(llaviucu_pollen, 2, max)
 n.occur <- apply(llaviucu_pollen>0, 2, sum)
-llaviucu_pollen <- llaviucu_pollen[, abund>2 & n.occur >2] #more than 3% of RA and present in >2 samples
+llaviucu_pollen <- llaviucu_pollen[, abund>1 & n.occur >2] #more than 1% of RA and present in >2 samples
 
 # Combine dataframe with ages and depths
 llaviucu_pollen <- cbind(agedepth, llaviucu_pollen)
@@ -221,10 +229,11 @@ core_hell2 <- core_hell[n.occur>0, ] #one single row has rowSums=0; remove it
 # Run Principal Curves and extract scores for then combining the resulting dataframe with agedepth
 pollen.prc <- prcurve(core_hell2, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
 cores_prc <- scores(pollen.prc, display = "curve")
-AgropastPrC <- cbind(agedepth[-nrow(agedepth),], cores_prc)
-  
+#AgropastPrC <- cbind(agedepth[-nrow(agedepth),], cores_prc)
+AgropastPrC <- cbind(agedepth, cores_prc)
+
 ## save results
-write.csv(pollenPrC, "outputs/agropastoralism-PrC.csv", row.names = FALSE)
+write.csv(AgropastPrC, "outputs/agropastoralism-PrC.csv", row.names = FALSE)
 
 # Plot Pcurves with depth and ages
 AgropastPlot <- ggplot(AgropastPrC, aes(x = upper_age, y = PrC)) +
@@ -235,8 +244,8 @@ AgropastPlot
 ```
 
 
-# Step 3: Interpolation of diatom into pollen record
-Diatom and pollen records come from two different sediment cores. In order to facilitate comparison we matched ages of diatom samples into pollen and Titanium (as indicator of terrigenous input) record. The final dataset includes a common age column containing Principal curves for diatom, pollen, and agropastoralism, and Ti time series. 
+# Step 3: Interpolation of diatom dataset into pollen record
+Diatom and pollen records are sampled from two different sediment cores. In order to facilitate comparison we matched ages of diatom samples into pollen and Titanium (as indicator of terrigenous input) record. The final dataset includes a common age column containing Principal curves for diatom, pollen, and agropastoralism, and Ti time series. 
 
 ```{r interpolation, message=FALSE, error=FALSE, results="hide", size="small"}
 library(tidyverse)
@@ -329,8 +338,12 @@ write.csv(interpolatedData, "outputs/principalcurves_ti_interp.csv")
 Here we generate an stacked plot of the time series
 ```{r summaryPlots}
 # read data
-df <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1]
-str(df)
+df <- interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1] %>%
+  mutate(sample_age_mean=(elapsedTime_ti+elapsedTime_diat)/2) #average sample ages of pollen and diatom records
+head(df)
+
+# Define theme
+theme_set(theme_bw())
 
 # Plot stacked time series
 data_plt <- df %>% 
@@ -342,32 +355,58 @@ plt <- ggplot(data_plt, aes(x=Age, y=var))+
   labs(y = "", x = "Age (cal yr BP)", title = "")
 plt
 
+# plt_agropast <- ggplot(agroast_long, aes(x=upper_age, y=value))+
+#   geom_line() +
+#   facet_wrap(vars(taxa), scales = "free") +
+#   theme(axis.title.y=element_text(size=12))+
+#   labs(y = "", x = "Age (cal yr BP)", title = "")
+# plt_agropast
+
+
 # Save plot
 ggsave("outputs/stackedTS.png",
-       plot = plt ,
+       plot = plt_agropast,
        width = 10,
        height=8,
        units="in",
        dpi = 400)
 
+# Generate a series of phase-space for drivers (pollen, agropastoralism, Ti, charcoal) vs response variables (diatoms) coloured by year
+
+ggplot(df, aes(x=pollenPrC, y=diatPrC, colour=Age)) +
+  geom_point(size=2) +
+  scale_color_viridis_c()
+
+ggplot(df, aes(x=agropastPrC, y=diatPrC, colour=Age)) +
+  geom_point(size=2) +
+   scale_color_viridis_c()
+
+ggplot(df, aes(x=Ti, y=diatPrC, colour=Age)) +
+  geom_line(size=2) +
+   scale_color_viridis_c()
+
+ggplot(df, aes(x=charcoal, y=diatPrC, colour=Age)) +
+  geom_point(size=2) +
+   scale_color_viridis_c()
+
 ```
 
 
 # Step 4: Fit PrC-GAMs 
-In this step we model diatom PrC as function of pollen, agropastoralism and Ti with Generalized Additive Models (GAMs). We then extract predicted values to test the temporal contribution of covariates to explain drivers of diatom assemblage change.
+In this step we model diatom PrC as function of pollen, agropastoralism and Ti with Generalized Additive Models (GAMs). We then extract predicted values to test the temporal contribution of these covariates to explain drivers of diatom assemblage change.
 
 ```{r prc-gam, message=FALSE, error=FALSE, results="hide", size="small"}
 library(mgcv)
 library(tidyverse)
 library(ggplot2)
+library(gratia)
 
-# Read in the interpolated dataset of Ti, pollen and agropastoralism data on diatom record
+# Read in the interpolated dataset of Ti, pollen and agropastoralism PrCs 
 interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1] %>%
   mutate(sample_age_mean=(elapsedTime_ti+elapsedTime_diat)/2) #average sample ages of pollen and diatom records
 
 # this chunk run the model weighting in the elapsed time of the pollen record
-mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(charcoal) + s(Ti) +
-              s(pollenPrC) + s(agropastPrC),
+mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(Ti) + s(pollenPrC) + s(agropastPrC),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_diat / mean(elapsedTime_diat),
             select = TRUE, family = gaussian(link="identity"),
@@ -376,14 +415,15 @@ mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(charcoal) + s(Ti) +
 
 plot(mod1, page=1, scale = 0)
 gam.check(mod1)
+appraise(mod1)
 summary(mod1)
 
+
 #Check temporal autocorrelation of the residuals
-pacf(residuals(mod1)) # indicates AR1
+pacf(residuals(mod1)) # indicates AR1 at lag 10
 
 #accounting for temporal autocorrelation (note basis function with adaptative splines are not possible)
-mod1.car <- gamm(diatPrC ~ s(Age, k=40) + s(Ti) + s(charcoal) + s(Ti) +
-                 s(pollenPrC) + s(agropastPrC),
+mod1.car <- gamm(diatPrC ~ s(Age, k=40) + s(Ti) + s(pollenPrC) + s(agropastPrC),
                  data = interpolatedData, method = "REML", 
                  weights = elapsedTime_diat/ mean(elapsedTime_diat),
                  family = gaussian(link="identity"),
@@ -423,8 +463,8 @@ predGam <- cbind(interpolatedData,
                                         type = "terms" , se.fit = TRUE)))
 
 #Select covariates to plot (those having significant effects on the mean values of diatom PrC)
-var <- predGam$fit.s.Ti.
-se.var <- predGam$se.fit.s.Ti.
+var <- predGam$fit.s.agropastPrC.
+se.var <- predGam$se.fit.s.agropastPrC.
 
 # Plot temporal contribution of covariates on response 
 predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +

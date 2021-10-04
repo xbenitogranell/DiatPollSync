@@ -34,32 +34,6 @@ new <- diatoms_save %>%
   mutate(relative_abundance_percent = count / sum(count) * 100) %>%
   ungroup()
 
-# #this is to calculate planktic:benthic ratios
-# new <- diatoms_save %>% 
-#   gather(key = taxa, value = count, -depth, -upper_age, -lower_age, -lake) %>%
-#   mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_1)) %>% #ecological grouping
-#   group_by(depth, taxa, lake, upper_age, lower_age) %>%
-#   summarise(count = sum(count)) %>%
-#   filter(!count == "0" ) %>% #this is to remove empty samples (rows)
-#   filter(!upper_age==0.0) %>% #this is to drop extraneous ages
-#   ungroup() %>%
-#   group_by(depth, lake) %>%
-#   mutate(relative_abundance_percent = count / sum(count) * 100) %>%
-#   mutate(plank=sum(count[taxa=="freshwater_planktic" | taxa=="tycoplanktonic"])) %>%
-#   mutate(benthic=sum(count[taxa=="epiphytics"| taxa== "saline" | taxa=="benthic"])) %>%
-#   mutate(P_B=plank/benthic) %>%
-#   mutate(P_B2=(plank-benthic)/(plank+benthic)) %>% #[-1(benthic dominated) to 1(planktic dominated)]
-#   ungroup() 
-
-#make it wide
-# core_counts_ratios <- new %>%
-#   select(depth, lake, upper_age, lower_age, taxa, P_B2, relative_abundance_percent) %>%
-#   spread(key = taxa, value = relative_abundance_percent) 
-# 
-# ## split cores by lakes and reassemble
-# coresList <- split(core_counts_ratios, core_counts_ratios$lake)
-# saveRDS(coresList, file = "diatomratios.rds")
-
 # filter more abundant taxa; format need to be on long-wide format-->no spreaded 
 core_common_taxa <- new %>%
   group_by(taxa) %>%

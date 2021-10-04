@@ -2,8 +2,12 @@
 #######   HGAM-based derivative models  ########
 ################################################
 
-#######  diatom assemblages
+# Load libraries for functions used
+library(tidyverse)
+library(mgcv)
 
+
+#######  diatom assemblages
 #read dataframe with diatom absolute counts
 mergedCores <- read.csv("data/mergedCores_counts4.csv")[-1] #read dataframe with diatom absolute counts including Fondococha
 
@@ -63,6 +67,7 @@ diatom_gam_S <- gam(count ~ s(negAge, spp, k=20, bs="fs") + offset(log_total_cou
                     knots = list(negAge=quantile(diat_data$negAge, seq(0,1, length=10))), #places notes at the deciles of sample ages
                     method = "REML")
 
+summary(diatom_gam_S)
 gam.check(diatom_gam_S)
 draw(diatom_gam_S)
 
@@ -159,11 +164,11 @@ years <- seq(min(diat_plot_data$negAge),
              max(diat_plot_data$negAge),
              length.out = n_length)
 
-#model <- diatom_gam_S
-model <- diatom_gam_I
+model <- diatom_gam_S
+#model <- diatom_gam_I
 
-#pred <- diat_modS_fit
-pred <- diat_modI_fit
+pred <- diat_modS_fit
+#pred <- diat_modI_fit
 
 # Generate multivariate normal simulations of model coefficients
 random_coefs <- t(rmvn(n_sims, mu = coef(model),V = vcov(model)))
@@ -217,6 +222,8 @@ deriv_summaries <- derivs %>%
                              upper = ~quantile(.,probs = 0.975),
                              med   = ~quantile(.,probs = 0.5)))
 
+diatoms_deriv <- deriv_summaries
+
 ## save derivative summaries for later use
 write.csv(deriv_summaries, "outputs/diatom-derivatives_24timeSteps.csv", row.names = FALSE)
 
@@ -234,7 +241,7 @@ pollen <- read.csv("data/llaviucu_pollen.csv") %>%
   left_join(pollen, by="depth")
   
 #select human disturbance pollen taxa
-agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", 
+agropastolarism_indicators <- c("Zea", "Hedyosmum", "Phaseolus", "Ipomoea", "Rumex", "Begoniaceae", 
                                 "Alnus", "Cyperaceae", "Cecropia", "Asteracea", "sporormiella","Charcoal.cc.")
 agropastolarism <- select(pollen, contains(agropastolarism_indicators))
 agropastolarism <- data.frame(sapply(agropastolarism, function(x) as.numeric((x))))
@@ -251,8 +258,8 @@ pollen <- data.frame(sapply(pollen, function(x) as.numeric((x))))
 pollen[is.na(pollen)] <- 0 #Replace NA (if any) by 0
 
 ## assign dataframe to analyze
-llaviucu_pollen <- pollen
-#llaviucu_pollen <- agropastolarism
+#llaviucu_pollen <- pollen
+llaviucu_pollen <- agropastolarism
 
 
 #Select most common species (only for pollen dataset)
@@ -274,7 +281,7 @@ pollen_data <- spp_thin %>%
   group_by(depth) %>%
   mutate(total_sample = sum(count)) %>% 
   filter(!total_sample == "0") %>% #this is to remove empty samples
-  filter(!upper_age == 0) %>% #this is to remove ages == 0 (triumfo and fondodocha record)
+  filter(!upper_age == 0) %>% #this is to remove ages == 0 
   mutate(log_total_counts = log10(total_sample+1)) %>%
   mutate(relative_abundance_percent = count / sum(count) * 100) %>%
   mutate(negAge = -upper_age) %>%
@@ -285,6 +292,12 @@ pollen_data <- spp_thin %>%
 
 levels(pollen_data$spp)
 
+#make it wide
+pollen_data_wide <- pollen_data %>%
+  select(depth, upper_age, lower_age, taxa, relative_abundance_percent) %>%
+  spread(key = taxa, value = relative_abundance_percent) 
+
+
 #model S HGAM : similar smootheness between groups (spp) without global smooth 
 set.seed(10) #set a seed so this is repeatable
 
@@ -293,6 +306,7 @@ pollen_gam_S <- gam(count ~ s(negAge, spp, k=30, bs="fs") + offset(log_total_cou
                     data=pollen_data, family = nb, 
                     method = "REML")
 
+summary(pollen_gam_S)
 gam.check(pollen_gam_S)
 draw(pollen_gam_S)
 
@@ -347,8 +361,8 @@ pollen_plot_data <- mutate(pollen_plot_data, se= c(as.numeric(pollen_modS_fit$se
                            fit   = exp(fit))
 
 # For one model only
-pollen_plot_data <- gather(pollen_plot_data, key=model, value=fit, modI_fit)
-pollen_plot_data <- mutate(pollen_plot_data, se= c(as.numeric(pollen_modI_fit$se.fit)),
+pollen_plot_data <- gather(pollen_plot_data, key=model, value=fit, modS_fit)
+pollen_plot_data <- mutate(pollen_plot_data, se= c(as.numeric(pollen_modS_fit$se.fit)),
                            upper = exp(fit + (2 * se)),
                            lower = exp(fit - (2 * se)),
                            fit   = exp(fit))
@@ -410,10 +424,10 @@ years <- seq(min(pollen_plot_data$negAge),
              max(pollen_plot_data$negAge),
              length.out = n_length)
 
-#model <- pollen_gam_S
+model <- pollen_gam_S
 model <- pollen_gam_I
 
-#pred <- pollen_modS_fit
+pred <- pollen_modS_fit
 pred <- pollen_modI_fit
 
 # Generate multivariate normal simulations of model coefficients
@@ -469,7 +483,7 @@ deriv_summaries <- derivs %>%
                              med   = ~quantile(.,probs = 0.5)))
 
 #Plotting mean rate of change plus the 95% CI
-mean_plot <- deriv_summaries %>%
+mean_plot <- diatoms_deriv %>%
   ggplot(aes(x = negAge, 
              y = deriv_mean_med, 
              ymin = deriv_mean_lower,
@@ -744,19 +758,21 @@ deriv_summaries_all <- read.csv("outputs/diatom-derivatives.csv") %>%
   mutate(proxy="diatoms") %>%
   bind_rows(deriv_summaries_All_pollen)
 
-write.csv(deriv_summaries_all, "outputs/diatom_pollen_derivatives.csv")
+#write.csv(deriv_summaries_all, "outputs/diatom_pollen_derivatives.csv")
 
 #Plotting mean rate of change plus the 95% CI
+deriv_summaries_all$proxy <- factor(deriv_summaries_all$proxy, ordered = TRUE, levels = c("diatoms", "agropastoralism", "pollen"))
+
 mean_plot <- deriv_summaries_all %>%
-  ggplot(aes(x = negAge, 
+  ggplot(aes(x = -negAge, 
              y = deriv_mean_med, 
              ymin = deriv_mean_lower,
              ymax = deriv_mean_upper))+
   geom_ribbon(fill="grey")+
   geom_line()+
   geom_hline(yintercept = 0, linetype=2) +
-  scale_y_continuous("")+
-  xlab("") +
+  scale_y_continuous("Average rate of change of log-abundance (year-1)")+
+  xlab("Cal yr BP") +
   facet_wrap(~proxy, scales="free")+
   ggtitle("")+
   theme_bw()
@@ -765,7 +781,7 @@ mean_plot
 
 #Plotting standard deviation of rate of change plus the 95% CI
 sd_plot <- deriv_summaries_all %>%
-  ggplot(aes(x = negAge, 
+  ggplot(aes(x = -negAge, 
              y = deriv_sd_med, 
              ymin=deriv_sd_lower,
              ymax=deriv_sd_upper))+
@@ -786,10 +802,10 @@ mean_sd_pl_all <- plot_grid(mean_plot, sd_plot, align = "hv",
 mean_sd_pl_all
 
 # save plot
-ggsave("outputs/llaviucu_HGAMderivative_GI_pollen_diatom_all_sync.png",
-       plot = mean_sd_pl_all,
+ggsave("outputs/llaviucu_HGAMderivative_logAbnd.png",
+       plot = mean_plot,
        width = 10,
-       height=8,
+       height=6,
        units="in",
        dpi = 400)
 

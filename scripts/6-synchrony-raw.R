@@ -21,40 +21,11 @@ dataBinned <- binFunc(as.data.frame(interpolatedData), as.numeric(interpolatedDa
 #remove NaNs
 #dataBinned <- na.omit(dataBinned)
 str(dataBinned)
-
 dataBinned$Age <- rownames(dataBinned)
 
 #diat <- dataBinned$diatPrC
 #pollen <- dataBinned$pollenPrC
 #agropastolarism <- dataBinned$agropastPrC
-
-# Multivariate ordination of combined datasets
-diatRA <- read.csv("data/diatomsRA.csv")[,-1] %>%
-  select(-lake, -depth, -lower_age) 
-diatRA <- diatRA[order(diatRA$upper_age),] #order time
-diatRA_ages <- diatRA[,"upper_age"]
-diatRA <- diatRA[,!names(diatRA) %in% "upper_age"]
-
-pollenRA <- read.csv("data/pollenRA.csv")[,-1] %>% 
-  select(-depth, -lower_age)
-pollenRA_ages <- pollenRA[,"upper_age"]
-pollenRA <- pollenRA[,!(names(pollenRA) %in% "upper_age")]
-
-agropastoralismRA <- read.csv("data/agropastoralismRA.csv")[,-1] %>% 
-  select(-depth, -upper_age, -lower_age)
-
-#df <- analogue::join(diatRA, pollenRA, agropastoralismRA)
-
-
-
-#make the age categories (60-years bins) and combine the two datasets
-PollenBinned <- binFunc(as.data.frame(pollenRA), as.numeric(pollenRA_ages), 60, 0, 3000) 
-AgropastBinned <- binFunc(as.data.frame(agropastoralismRA), as.numeric(pollenRA_ages), 60, 0, 3000)
-DiatBinned <- binFunc(as.data.frame(diatRA), as.numeric(diatRA_ages), 60, 0, 3000) 
-
-#varBinInter <- na.approx(varBin, na.rm = TRUE) #do interpolation between adjacent samples
-
-combinedData <- cbind(PollenBinned, AgropastBinned, DiatBinned)
 
 
 # Here perform a DCA
