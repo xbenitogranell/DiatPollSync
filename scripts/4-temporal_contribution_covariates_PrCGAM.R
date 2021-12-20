@@ -5,10 +5,11 @@ library(tidyverse)
 library(mgcv)
 
 # Read in the interpolated dataset of Ti, pollen and agropastoralism data on diatom record
-interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp_finer.csv")
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp_coarser.csv")
 
 # this chunk run a multivariate GAM weighting in the elapsed time of the pollen (Majoi) core
-mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti, k=10) + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
+mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti) + s(pollenPrC, k=10, bs="ad") + s(agropastPrC,k=10, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_ti / mean(elapsedTime_ti),
             select = TRUE, family = gaussian(link="identity"),
@@ -21,7 +22,7 @@ gam.check(mod1)
 summary(mod1)
 
 
-# this chunk run the model weighting in the elapsed time of the diatom core
+# this chunk run the model weighting in the elapsed time of the diatom core (ULL! not applicable for the coarser dataset)
 mod2 <- gam(diatPrC ~ s(Age, k=20) + s(Ti, k=15, bs="ad") + s(pollenPrC) + s(agropastPrC, k=10, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_diat / mean(elapsedTime_diat),
@@ -53,7 +54,7 @@ gam.check(mod1.car$gam)
 
 
 #Compare different model fits using AIC
-AIC_table <- AIC(mod1, mod2)%>%
+AIC_table <- AIC(mod1, mod1.car$lme)%>%
   rownames_to_column(var= "Model")%>%
   mutate(data_source = rep(c("diatom_data")))%>%
   group_by(data_source)%>%
@@ -78,8 +79,8 @@ predGam <- cbind(interpolatedData,
                                         type = "terms" , se.fit = TRUE)))
 
 #plot
-var <- predGam$fit.s.agropastPrC.
-se.var <- predGam$se.fit.s.agropastPrC.
+var <- predGam$fit.s.pollenPrC.
+se.var <- predGam$se.fit.s.pollenPrC.
 
 predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
   geom_line() +
@@ -100,6 +101,7 @@ ggsave("outputs/diatomPrC_GAM_covariates.png",
        units="in",
        dpi = 400)
 
+####
 
 
 

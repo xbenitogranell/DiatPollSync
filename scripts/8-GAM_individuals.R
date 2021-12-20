@@ -2,6 +2,10 @@
 # and use the resulting dataset to perform multivariate GAM and multivariate ordination. This way, predicted data for
 # the different variables will have the same time-series
 
+library(mgcv)
+library(tidyverse)
+library(ggplot2)
+library(gratia)
 
 ## read in PrC datasets: diatom, pollen and agropastoralism
 diatomPrC <- readRDS("outputs/PrC-cores-diatoms.rds") %>%
@@ -34,9 +38,8 @@ mean(diff(diatomPrC$Age))
 #check the median combined age interval
 median(mean(diff(diatomPrC$Age), mean(diff(pollenPrC$Age)))) #20 years
 
-
 # Diatom PrC GAM
-gamPrC_diat <- gam(PrC ~ s(Age, k=30),
+gamPrC_diat <- gam(PrC ~ s(Age, k=30, bs="ad"),
             data = diatomPrC, method = "REML", 
             weights = elapsedTime / mean(elapsedTime),
             select = TRUE, family = gaussian(link="identity"),
@@ -49,6 +52,7 @@ appraise(gamPrC_diat)
 ## Here the synthetic data to predict should be over the range of diatom ages to get the same ages for the synchronous/asynchronous model
 diatom_plot_data <- with(diatomPrC, 
                          as_tibble(expand.grid(Age = seq(min(diatomPrC$Age), max(diatomPrC$Age)))))
+
 # Predict over the range of new values
 diatom_mod_fit <- predict(gamPrC_diat, 
                           newdata = diatom_plot_data,
@@ -86,7 +90,6 @@ diatom_plt
 
 # create a name vector for the dataset
 diatom_plot_data$variable <- "diatoms"
-
 
 # Pollen PrC GAM
 gamPrC_pollen <- gam(PrC ~ s(Age, k=30),
@@ -261,7 +264,6 @@ charcoal_plt
 # create a name vector for the dataset
 charcoal_plot_data$variable <- "charcoal"
 
-
 ## Model Ti-GAM
 # read in XRF Llaviucu data (Majoi=pollen record)
 llaviucu_xrf <- read.csv("data/XRFTransformed3000yrs.csv") %>% rename(age=age_calBP) 
@@ -341,10 +343,9 @@ xrf_plt
 xrf_plot_data$variable <- "Si"
 xrf_plot_data$variable <- "MnFe"
 
-
 ## Combine all GAM-inferred variables
 multiproxy <- rbind(diatom_plot_data,pollen_plot_data,agropast_plot_data,
-                    charcoal_plot_data,ti_plot_data,xrf_plot_data) %>%
+                    charcoal_plot_data,xrf_plot_data) %>%
   mutate(variable=factor(variable))
 
 ## trim to multiproxy dataset to diatom dataset time visits (response variable with more than time series)
