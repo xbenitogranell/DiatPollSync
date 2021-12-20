@@ -99,7 +99,16 @@ binFunc = function(xDF, Ages, binWidth, minBin, maxBin){
   
 }
 
-
+bind_cols_fill <- function(df_list) {
+  
+  max_rows <- map_int(df_list, nrow) %>% max()
+  
+  map(df_list, function(df) {
+    if(nrow(df) == max_rows) return(df)
+    first <- names(df)[1] %>% sym()
+    df %>% add_row(!!first := rep(NA, max_rows - nrow(df)))
+  }) %>% bind_cols()
+}
 
 #FUNCTION TO SCALE DATA
 scaleData=function(data, old.max, old.min, new.max, new.min){
