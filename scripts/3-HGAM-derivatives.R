@@ -763,6 +763,12 @@ deriv_summaries_all <- read.csv("outputs/diatom-derivatives.csv") %>%
 #Plotting mean rate of change plus the 95% CI
 deriv_summaries_all$proxy <- factor(deriv_summaries_all$proxy, ordered = TRUE, levels = c("diatoms", "agropastoralism", "pollen"))
 
+facet_lables <- c(
+  `diatoms` = "Diatoms",
+  `agropastoralism` = "Agropastoralism",
+  `pollen` = "Pollen"
+)
+
 mean_plot <- deriv_summaries_all %>%
   ggplot(aes(x = -negAge, 
              y = deriv_mean_med, 
@@ -770,12 +776,17 @@ mean_plot <- deriv_summaries_all %>%
              ymax = deriv_mean_upper))+
   geom_ribbon(fill="grey")+
   geom_line()+
+  geom_point() +
   geom_hline(yintercept = 0, linetype=2) +
   scale_y_continuous("Average rate of change of log-abundance (year-1)")+
-  xlab("Cal yr BP") +
-  facet_wrap(~proxy, scales="free")+
+  xlab("cal years BP") +
+  facet_wrap(~proxy, scales="free", labeller = as_labeller(facet_lables))+
   ggtitle("")+
-  theme_bw()
+  theme_bw() +
+  theme(strip.text.x = element_text(size = 12),
+        axis.text.x = element_text(size = 11),
+        axis.title.x = element_text(size = 13),
+        axis.title.y=element_text(size=13))
 mean_plot 
 
 
@@ -787,6 +798,7 @@ sd_plot <- deriv_summaries_all %>%
              ymax=deriv_sd_upper))+
   geom_ribbon(fill="grey")+
   geom_line()+
+  geom_point() +
   geom_hline(yintercept = 0, linetype=2) +
   scale_y_continuous("")+
   xlab("Cal years BP") +
@@ -807,7 +819,7 @@ ggsave("outputs/llaviucu_HGAMderivative_logAbnd.png",
        width = 10,
        height=6,
        units="in",
-       dpi = 400)
+       dpi = 300)
 
 
 
