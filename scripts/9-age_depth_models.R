@@ -2,8 +2,6 @@
 
 library(Bchron)
 library(tidyverse)
-# data("Glendalough")
-# head(Glendalough)
 
 dates <- read.csv('data/cores_dates_Bchron.csv', sep = ",")
 head(dates)

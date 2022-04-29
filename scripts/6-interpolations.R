@@ -89,7 +89,6 @@ write.csv(interpolatedData, "outputs/principalcurves_ti_interp_finer.csv")
 ####
 
 ### Interpolation to the coarser dataset: pollen
-
 # linear interpolation diatom to pollen PrCs
 diatom_to_pollen_prc_i <- as.data.frame(approx(diatomPrC$Age, diatomPrC$PrC, pollenPrC$Age)$y)
 diatom_to_pollen_prc_i$age <- pollenPrC$Age

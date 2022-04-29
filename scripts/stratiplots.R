@@ -26,23 +26,18 @@ pollenRA <- read.csv("data/pollenRA.csv")[,-1] %>%
 pollenRA_ages <- pollenRA[,"upper_age"]
 pollenRA <- pollenRA[,!(names(pollenRA) %in% "upper_age")]
 
-agropastoralismRA <- read.csv("data/agropastoralismRA.csv")[,-1] %>% 
-  gather(key = taxa, value = relative_abundance_percent, -depth, -upper_age, -lower_age)
-core_counts_common <- agropastoralismRA
-core_counts_common <- pollen_data
-
-
-  #make it wide
-  core_counts_wide <- core_counts_common %>%
-    dplyr::select(depth, upper_age, taxa, relative_abundance_percent) %>%
-    spread(key = taxa, value = relative_abundance_percent)
-
+agropastoralismRA <- read.csv("data/agropastoralismRA.csv")[,-1] %>%
+  select(-depth, -lower_age) 
+agropastoralismRA <- agropastoralismRA[order(agropastoralismRA$upper_age),]  #order time
+agropastoralismRA_ages <- agropastoralismRA[,"upper_age"]
+agropastoralismRA <- agropastoralismRA[,!names(agropastoralismRA) %in% "upper_age"]
+agropastoralismRA <- agropastoralismRA[,!names(agropastoralismRA) %in% "X"]
 
 
 # make name vectors to later replace taxon names to assemblage group
 nms_list <- data.frame(taxa = c(colnames(diatRA), colnames(pollenRA), colnames(agropastoralismRA)), 
-                       group = c(rep("diat",length(diatRA)), rep("pollen",length(pollenRA)), 
-                                 rep("agropastoralism",length(agropastoralismRA))))
+                       group = c(rep("Diatoms",length(diatRA)), rep("Pollen",length(pollenRA)), 
+                                 rep("Agropastoralism",length(agropastoralismRA))))
 
 
 #make the age categories (60-years bins; median combined age interval) and combine the two datasets
@@ -61,22 +56,42 @@ df_long <- combinedData %>%
   mutate(upper_age=as.numeric(upper_age)) %>%
   gather(key=taxa, value=relative_abundance_percent, -upper_age) %>%
   mutate(assemblage = plyr::mapvalues(taxa, from = nms_list$taxa, to = nms_list$group)) %>%
-  mutate(taxa=factor(taxa)) %>%
-  #filter(relative_abundance_percent>2) %>%
-  arrange(desc(relative_abundance_percent))
+  mutate(assemblage=recode(assemblage, 
+                    '1'="Agropastoralism",
+                    '2'="Diatoms",
+                    '3'="Pollen")) %>%
+  mutate(taxa=factor(taxa),
+         taxa = fct_reorder(taxa, relative_abundance_percent)) %>%
+  filter(relative_abundance_percent>4) %>%
+  mutate(taxa=reorder(taxa,relative_abundance_percent)) %>%
+  group_by(assemblage,taxa) %>%
+  arrange(relative_abundance_percent) %>%
+  ungroup() %>%
+  mutate(taxa = fct_relevel(taxa, "Sporormiella","Cyperaceae","Asteraceae.1","Hedyosmum","Alnus",
+                            "Navicula.radiosa","Aulacoseira.alpigena","Cocconeis.placentula.var.placentula","Encyonopsis.subminuta","Hannaea.arcus","Orthoseria.roseana","Ulnaria.cf.ulna.var.amphyrhynchus",
+                            "Gomphonema.sp.1.LLAVIUCU.cf.netriviale","Gomphonema.cf.geisslerae", "Gomphonema.sp.2.LLAVIUCU.cf.variostriatum", "Denticula.kuetzingii","Cymbella.cymbiformis.cystula","Encyonopsis.sp.1.LLAVIUCU","Discostella.stelligera",
+                            "Fragilaria.cf.capucina","Diatoma.tenuis","Brachysira.microcephala.neoxilis","Staurosira.construens.var.venter","Fragilaria.capuccina.agg","Tabellaria.flocculosa.str.IV","Nupela.sp.1.LLAVIUCU",
+                            "Achnanthidium.minutissimum", "Cyathea","Clethra","Symplocos","Polylepis","Weinmannia","Acalypha","Isoetes","Melast.Combret","Podocarpus","Morac.Urtica",
+                            "Monolete.psilate","Poaceae")) %>%
+  drop_na(relative_abundance_percent)
 
 levels(df_long$taxa)
 
 ## Using tidypaleo R package (https://fishandwhistle.net/post/2018/stratigraphic-diagrams-with-tidypaleo-ggplot2/)
-theme_set(theme_bw(9))
+theme_set(theme_bw(12))
+#theme_set(theme_paleo())
 
-composite_plot <- ggplot(df_long, aes(x = relative_abundance_percent, y = upper_age)) +
-  geom_col_segsh() +
+assemblage_plot <- ggplot(df_long, aes(x = relative_abundance_percent, y = upper_age, colour=assemblage)) +
+  geom_col_segsh(size=1.3) +
   scale_y_reverse() +
-  facet_abundanceh(vars(taxa)) +
-  labs(x = "Relative abundance (%)", y = "Cal yr BP")
-composite_plot
+  facet_abundanceh(vars(taxa), grouping = vars(assemblage), rotate_facet_labels = 70) +
+  #geom_lineh_exaggerate(exaggerate_x = 5, col = "grey70", lty = 2) +
+  labs(x = "Relative abundance (%)", y = "cal years BP", colour="Assemblage") +
+  #ggtitle("Assemblages") +
+  theme (legend.position = "none") 
+assemblage_plot
 
+#ggsave("outputs/proxies_stratplot.png", diat_plot, height = 6, width = 10)
 
 #read diatom data
 mergedCores <- read.csv("data/mergedCores_counts4.csv")[,-1] #with new Fondococha agedepth model
@@ -95,14 +110,14 @@ changes <- read.csv("data/old_new_nms_cores_counts.csv", stringsAsFactors = FALS
 
 #spread--> wide format
 spp_wide <- spp_thin %>%
-  mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_2)) %>%
+  mutate(taxa = plyr::mapvalues(taxa, from = changes[,1], to = changes$new_2)) %>%
   group_by(depth, lake, upper_age, taxa) %>%
   summarise(count = sum(count)) %>%
   spread(key = taxa, value = count)
 
 #no spread --> long format
 spp_long <- spp_thin %>%
-  mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_2)) %>%
+  mutate(taxa = plyr::mapvalues(taxa, from = changes[,1], to = changes$new_2)) %>%
   group_by(depth, lake, upper_age, taxa) %>%
   summarise(count = sum(count))
 
@@ -141,54 +156,6 @@ core_counts_wide <- core_counts_common %>%
 
 length(core_common_taxa)
 
-#do coniss
-core_counts_wide[is.na(core_counts_wide)] <- 0
-
-diatHel <- decostand(core_counts_wide[,4:ncol(core_counts_wide)], method="hellinger")
-diss <- vegdist(diatHel, method="bray")
-clust <- chclust(diss, method="coniss")
-bstick(clust)
-
-zones <- cutree(clust, k=4)
-locate <- cumsum(rle(zones)$lengths)+1
-zones <- core_counts_wide[locate, ][,3]
-zones <- zones$upper_age
-
-
-library(viridis)
-seq_palette <- viridis(5)
-
-gg <- ggplot(core_counts_common, aes(x=as.numeric(as.character(upper_age)), y=relative_abundance_percent))
-plt <- gg + geom_area(aes(colour=taxa, fill=taxa)) +
-  ylab("% total assemblage") +
-  xlab("Years cal BP")+
-  theme_bw()
-plt
-
-############################## END
-
-## plot using analogue Stratiplot (need data input in wide format --> spreaded)
-png("Stratiplot.png", width = 11, height = 8, res = 300, units = "in")
-
-Stratiplot(
-  core_counts_wide %>% select(-depth, -upper_age),
-  core_counts_wide$upper_age,
-  ylab = "Cal yr BP", 
-  xlab = "Relative abundance (%)",
-  # adds padding to the top of the plot
-  # to fix cut-off taxa names
-  topPad = 10, 
-  # make the plot type a "bar" plot
-  type = "h", 
-  #sort = "wa",
-  # add stratigraphic zones from cluster analyses (regime shifts R file)
-  #zones = zones,
-  # make the bar colour black
-  col = "black")
-
-dev.off()  
-
-
 
 ## merge species and non-species data  
 #Use a left-join to add non-species data
@@ -196,16 +163,8 @@ llaviucu_xrf <- read.csv("data/llaviucu_xrf.csv")
 
 #read Llaviucu pollen
 llaviucu_pollen_ratios <- read.csv("data/llaviucu_pollen.csv") %>% 
-  gather(key = taxa, value = relative_abundance_percent, -depth, -age) %>%
+  gather(key = taxa, value = relative_abundance_percent, -ï..depth, -age) %>%
   mutate(upper_age=age)
-
-  core_counts_common <- llaviucu_pollen_ratios
-  
-  #make it long for joining with non-species data
-  core_counts_long <- core_counts_common %>%
-    select(depth, upper_age, taxa, relative_abundance_percent) 
-
-llaviucu_pollen <- read.csv("data/llaviucu_pollen_raw.csv")
 
 #make it long for joining with non-species data
 core_counts_long <- core_counts_common %>%
@@ -215,88 +174,53 @@ core_counts_long <- core_counts_common %>%
 #llaviucu
 core_diat_geochem <- core_counts_long %>%
   left_join(llaviucu_xrf, by = "depth") %>%
-  mutate(Mn_Fe = Mn/Fe) %>%
-  mutate(Si_Ti = Si/Ti) %>%
-  mutate(K_Ti = K/Ti) %>%
+  mutate(MnFe = Mn/Fe) %>%
+  mutate(SiTi = Si/Ti) %>%
+  #mutate(K_Ti = K/Ti) %>%
   select(taxa, depth, everything())
 
 #table for tidypaleo stratiplot
-geochem_data <- core_diat_geochem %>% select(Mn_Fe,Si_Ti,K_Ti,upper_age) %>%
+geochem_data <- core_diat_geochem %>% select(MnFe,SiTi,upper_age) %>%
   gather(key=variable,value=value,-upper_age) 
 
 core_diat_geochem_wide <- core_diat_geochem %>%
-  select(Mn_Fe, Si_Ti, K_Ti, depth, upper_age, taxa, relative_abundance_percent) %>%
+  select(Mn_Fe, Si_Ti, depth, upper_age, taxa, relative_abundance_percent) %>%
   spread(key = taxa, value = relative_abundance_percent)
 
-#write.csv(core_diat_geochem_wide, "llaviucu_diat_proxy.csv")
+# Plot geochemistry using tidypaleo R package
+theme_set(theme_bw(12))
 
-png("Stratiplot.png", width = 11, height = 8, res = 300, units = "in")
-
-#varTypes argument needs to specify that the non-species variables should have independently sized axes. 
-#This should be a vector with the same number of elements as variables in the plot (I’ve use rep() to repeat “relative” and “absolute” the correct number of times.
-
-# code for diat spp and geochemistry
-Stratiplot(
-  core_diat_geochem_wide %>% select(-depth, -upper_age),
-  core_diat_geochem_wide$upper_age, 
-  varTypes = c(rep("absolute", 3), rep("absolute", length(core_common_taxa))), 
-  ylab = "Age (cal years BP)", 
-  xlab = "Relative abundance (%)",
-  topPad = 10, 
-  type = c("h"),
-  col = "black", 
-  #zones = zones
-)
-
-dev.off()
-
-
-## Using tidypaleo R package (https://fishandwhistle.net/post/2018/stratigraphic-diagrams-with-tidypaleo-ggplot2/)
-library(tidypaleo)
-library(patchwork)
-theme_set(theme_bw(9))
-
-diat_plot <- ggplot(core_counts_common, aes(x = relative_abundance_percent, y = upper_age)) +
-  geom_col_segsh() +
-  #geom_lineh() +
-  #geom_areah() +
-  scale_y_reverse() +
-  facet_abundanceh(vars(taxa)) +
-  geom_lineh_exaggerate(exaggerate_x = 5, col = "grey70", lty = 2) +
-  labs(x = "Relative abundance (%)", y = "Cal years BP")
-#add tephra layers at certain depths
-#annotate(geom="rect", xmin=-Inf, xmax=Inf, ymin=2082, ymax=2117, alpha=0.7, fill="grey") +
-# add CONISS zones
-#geom_hline(yintercept = zones, col = "blue", lty = 1, alpha = 0.7) 
-diat_plot
-
-ggsave("outputs/pollen_stratplot.png", diat_plot, height = 6, width = 10)
-
-
-## prepare geochemical data 
-# FIRST go to lines 264
 geochem_plot <- ggplot(geochem_data, aes(x = value, y = upper_age)) +
   geom_lineh() +
-  #geom_point() +
+  #geom_line(data = m.pred, aes(x=logMnFe, y=age)) + #first I pre-calculate model fit and make predictions
+  #geom_smooth()+
   scale_y_reverse() +
+  #geom_point() +
   facet_geochem_gridh(vars(variable)) +
   labs(x = NULL) 
+  #ggtitle("XRF")
+geochem_plot
 
-geochem_plot <- geochem_plot +
-  geom_lineh_exaggerate(exaggerate_x = 4, col = "grey70", lty = 1)
 
-strat_plt <- wrap_plots(
-  diat_plot + 
-    theme(strip.background = element_blank(), strip.text.y = element_blank()),
-  geochem_plot +
-    theme(axis.text.y.left = element_blank(), axis.ticks.y.left = element_blank()) +
-    labs(y = NULL),
+## combine plots
+library(patchwork)
+strat_plt2 <- wrap_plots(
+  assemblage_plot + 
+    theme(strip.text.y = element_text(size=10),
+          strip.text.x = element_text(size=9)),
+          #panel.grid = element_blank()),
+    geochem_plot +
+    theme(strip.text.x = element_text(size = 10),
+          axis.ticks.y.left = element_blank(),
+          axis.text.y.right = element_text()) +
+    labs(y = "cal years BP"),
   nrow = 1,
-  widths = c(4, 1)
+  widths = c(4, 0.5)
 )
-strat_plt
+strat_plt2
 
-ggsave("outputs/llaviucu_stratplot.png", strat_plt, height = 6, width = 10)
+ggsave("outputs/proxies_stratplot_REV.png", strat_plt2, height = 9, width = 11, dpi=150)
+
 
 
 

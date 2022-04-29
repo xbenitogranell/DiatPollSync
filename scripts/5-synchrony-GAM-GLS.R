@@ -162,7 +162,7 @@ lags<-1:40
 lag.data.backward <- backwardLags(
   lags=lags, 
   reference.data=diat, 
-  data.to.lag=agropastolarism
+  data.to.lag=pollen
 )
 
 
@@ -228,19 +228,21 @@ backward.plot.coefficient <- ggplot(data=subset(backward.results, variable=="Coe
   geom_hline(yintercept=0, color="black", linetype=2) +
   geom_ribbon(aes(ymin=lower,ymax=upper), alpha=0.3, fill=viridis.colors[2]) +
   geom_line(size=1.5, color=viridis.colors[1]) +
-  ggtitle(expression("Agropastoralism" %->% "Diatoms")) +
+  ggtitle(expression("Pollen" %->% "Diatoms")) +
   theme(legend.position="none") +
   xlab("") +
   ylab("Standardized coefficient") +
   scale_y_continuous(breaks=seq(min.coefficient, max.coefficient, by=0.8)) +
-  scale_x_reverse()+
-  theme(axis.text = element_text(size=12),
-        plot.title = element_text(size=14),
+  #scale_x_reverse()+
+  theme(axis.text.y = element_text(size=16),
+        axis.text.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        plot.title = element_text(size=16),
         plot.margin = unit(c(0, 0, 0, 0), "cm"),
-        axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.line.x=element_blank(),
-        axis.ticks.x = element_blank()) +
+        axis.title.x=element_blank()) +
+        #axis.text.x=element_blank(),
+        #axis.line.x=element_blank(),
+        #axis.ticks.x = element_blank()) +
   theme_classic()
   #coord_cartesian(ylim = c(min.coefficient, max.coefficient + 0.5))
 
@@ -255,10 +257,11 @@ backward.plot.R2 <- ggplot(data=subset(backward.results, variable=="R2"), aes(x=
   xlab("Years (before Diatom samples)") +
   ylab("Pseudo R squared") +
   scale_y_continuous(breaks=seq(0, max.R2, by=0.1)) +
-  scale_x_reverse()+
-  theme(axis.text = element_text(size=12),
-        axis.text.x = element_text(size=12),
-        plot.title = element_text(size = 14),
+  #scale_x_reverse()+
+  theme(axis.text.y = element_text(size=16),
+        axis.text.x = element_text(size=16),
+        plot.title = element_text(size=16),
+        axis.title.y = element_text(size=16),
         plot.margin = unit(c(0.2, 0.5, 0, 0), "cm")) +
   theme_classic() +
   coord_cartesian(ylim = c(0, max.R2 + 0.05))
@@ -274,12 +277,12 @@ plot_composite <- plot_grid(backward.plot.coefficient,
 plot_composite
 
 # save plot
-ggsave("outputs/agropastoralism_diatoms_asycnchronousModel.png",
+ggsave("outputs/pollen_diatoms_asycnchronousModel.png",
        plot = plot_composite,
        width=8,
        height=6,
        units="in",
-       dpi = 400)
+       dpi = 300)
 
 
 

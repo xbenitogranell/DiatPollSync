@@ -9,7 +9,7 @@ interpolatedData <- read.csv("outputs/principalcurves_ti_interp_finer.csv")
 interpolatedData <- read.csv("outputs/principalcurves_ti_interp_coarser.csv")
 
 # this chunk run a multivariate GAM weighting in the elapsed time of the pollen (Majoi) core
-mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti) + s(pollenPrC, k=10, bs="ad") + s(agropastPrC,k=10, bs="ad"),
+mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti, k=10, bs="ad") + s(pollenPrC, k=15, bs="ad") + s(agropastPrC, k=15, bs="ad"),
             data = interpolatedData, method = "REML", 
             weights = elapsedTime_ti / mean(elapsedTime_ti),
             select = TRUE, family = gaussian(link="identity"),
@@ -79,27 +79,76 @@ predGam <- cbind(interpolatedData,
                                         type = "terms" , se.fit = TRUE)))
 
 #plot
-var <- predGam$fit.s.pollenPrC.
-se.var <- predGam$se.fit.s.pollenPrC.
+var <- predGam$fit.s.agropastPrC.
+se.var <- predGam$se.fit.s.agropastPrC.
 
 predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
   geom_line() +
-  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var), alpha = 0.1)) +
+  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var)),alpha=0.4) +
+  geom_point()+
   #scale_x_reverse() +
-  labs(y = "Diatom GAM PrC", x = "Cal yr BP", title = "")+
+  labs(y = "Agropastoralism", x = "cal years BP", title = "")+
   theme(legend.position = "none")+
   geom_hline(yintercept=0, linetype="dashed")+
   theme_bw()+ theme(legend.position = "none")+
-  ggtitle(expression("Agropastoralism" %->% "Diatoms"))
+  #ggtitle(expression("Agropastoralism" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size=12),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
 
-predGamPlt
+var2 <- predGam$fit.s.pollenPrC.
+se.var2 <- predGam$se.fit.s.pollenPrC.
+
+predGamPlt2 <- ggplot(predGam, aes(x = Age, y = var2)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var2 + (2 * se.var2), ymax = var2 - (2 * se.var2)),alpha=0.4) +
+  geom_point()+
+  #scale_x_reverse() +
+  labs(y = "Pollen", x = "cal years BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  #ggtitle(expression("Pollen" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.ticks.x = element_blank(),
+        axis.text.y=element_text(size=12),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
+
+var3 <- predGam$fit.s.Ti.
+se.var3 <- predGam$se.fit.s.Ti.
+
+predGamPlt3 <- ggplot(predGam, aes(x = Age, y = var3)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var3 + (2 * se.var3), ymax = var3 - (2 * se.var3)),alpha=0.4) +
+  geom_point()+
+  #scale_x_reverse() +
+  labs(y = "Titanium", x = "cal years BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  #ggtitle(expression("Titanium" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.text.y=element_text(size=12),
+        axis.text.x = element_text(size = 11),
+        axis.title.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
+
+library(cowplot)
+predGam_all <- plot_grid(predGamPlt, predGamPlt2, predGamPlt3, align = "hv", 
+                            nrow=3,ncol = 1, axis="tblr", labels = "AUTO")
+predGam_all
 
 ggsave("outputs/diatomPrC_GAM_covariates.png",
-       plot = predGamPlt ,
-       width = 10,
-       height=8,
+       plot = predGam_all ,
+       width = 8,
+       height=10,
        units="in",
-       dpi = 400)
+       dpi = 150)
 
 ####
 

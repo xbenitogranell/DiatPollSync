@@ -1,74 +1,4 @@
 ## Functions from Blas Benito (https://github.com/BlasBenito/BaleFire) https://zenodo.org/record/2599859#.YCTzbGhKiUk 
-
-
-##-----------------------------------------------------------------------------
-# Function for testing for autocorrelation of residuals in a model using Moran's I, then fitting an exponential model to the Moran's I estimates. 
-
-# Returns the range (i.e distance (in years) at which autocorrelation has an effect, defined as distance at which exponential curve predicts Moran's I to go below 0.1
-# -----------------------------------------------------------------------------
-
-acfTest = function(x, y.model){
-  
-  a <- NA
-  # x = age vector
-  # y.model = model
-  
-  
-  par(mfrow=c(2,1))
-  plot(x, residuals(y.model), xlab = "Age (cal yr BP)", ylab ="PC1 residuals")
-  abline(h=0, lty=2)
-  
-  y= residuals(y.model)
-  
-  ncf.cor = correlog(x, y, y, increment=20, quiet=T, resamp=1000, na.rm=T)
-  mIcoef = ncf.cor$correlation
-  
-  # Truncate values greater than 1/ less than -1 (see Duitilleul et al. 2012, pp. 533)	
-  mIcoef[mIcoef>1]<-1
-  mIcoef[mIcoef<(-1)]<--1
-  
-  acfResult = mIcoef
-  ageDif= ncf.cor$mean.of.class
-  
-  acfcheckResult= ageDif
-  acfP = ncf.cor$p
-  
-  # Put the acf scores into a matrix- each column is a time window containing a set of Moran's I scores where appropriate.
-  
-  acfResult1 = acfResult	
-  acfResult1[acfP>0.05]<-0
-  
-  binACF <-c(1, acfResult[1:30])
-  binTime<-c(0, ageDif[1:30])
-  
-  plot(binTime, binACF, pch=20, col="red", ylab="Correlation", xlab= "Distance (years)", xlim=c(0,300))
-  points(binTime, binACF, pch=1, col="blue")
-  abline(h=0, lty=2)
-  
-  
-  # Fit exponential decay curve where 0 years =1, asymptote = 0. 
-  b0=0 
-  b1=1
-  
-  fit.nls<- tryCatch(fit.nls<-nls(binACF~b0+b1*exp(b2*binTime),start=c(b2=-0.02)), error=function(e) a)
-  
-  b<-class(fit.nls)
-  if(b== "nls"){
-    
-    # summary(fit.nls)$coefficients[1]
-    predict.x <- seq(0, 300)
-    predict.y<- predict(fit.nls, newdata= list(binTime=predict.x))
-    lines(predict.x, predict.y, col="red")
-    
-    which(predict.y<0.1)[1]
-    
-  } else {
-    
-    fit.nls	
-  } 
-}
-
-
 # -----------------------------------------------------------------------------
 # Function for binning samples in core.
 # -----------------------------------------------------------------------------
@@ -98,8 +28,6 @@ binFunc = function(xDF, Ages, binWidth, minBin, maxBin){
   coreRes
   
 }
-
-
 
 #FUNCTION TO SCALE DATA
 scaleData=function(data, old.max, old.min, new.max, new.min){
@@ -223,16 +151,16 @@ backwardLags <- function(lags, reference.data, data.to.lag){
     #get the age of the replicated line
     diat.case.age=diat[diat.case, "age"]
     
-    #diat.case.age.plus.lags=round((diat.case.age + (diff(pollen$age)[1] * max(lags))), 2)
-    diat.case.age.plus.lags=round((diat.case.age + (diff(agropastolarism$age)[1] * max(lags))), 2)
+    diat.case.age.plus.lags=round((diat.case.age + (diff(pollen$age)[1] * max(lags))), 2)
+    #diat.case.age.plus.lags=round((diat.case.age + (diff(agropastolarism$age)[1] * max(lags))), 2)
 
     #if beyond maximum age
-    #if (diat.case.age.plus.lags > max(pollen$age)){break}
-    if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
+    if (diat.case.age.plus.lags > max(pollen$age)){break}
+    #if (diat.case.age.plus.lags > max(agropastolarism$age)){break}
     
     #get from pollen the lines with age > age.diatoms && age <= age.diatoms + lags
-    #pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
-    pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    pollen.temp=pollen[which(pollen$age > diat.case.age & pollen$age <= diat.case.age.plus.lags), "pollen_deriv"]
+    #pollen.temp=agropastolarism[which(agropastolarism$age > diat.case.age & agropastolarism$age <= diat.case.age.plus.lags), "pollen_deriv"]
     
     #put the data together
     pollen.temp=data.frame(diatom_deriv=diat.value, pollen_deriv=pollen.temp, lag=lags)
