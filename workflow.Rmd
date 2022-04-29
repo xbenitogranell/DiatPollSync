@@ -1,28 +1,37 @@
 ---
-title: "Paper Diatom-Pollen-Coupling"
-author: "XBenito"
-date: "15/4/2021"
-output: word_document
+title: "WORKFLOW for Lake Llaviucu aquatic-terrestrial ecological coupling"
+author: 'Author: Xavier Benito (xavier.benito.granell@gmail.com)'
+date: 'Date: 29/04/2022'
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
 ---
 
-```{r setup, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE, results="hide"}
-knitr::opts_chunk$set(echo = TRUE)
-```
+## Introduction
+This workflow is written as a R Markdown document to show data analyses to reproduce the manuscript [**'Human practices are behind the aquatic and terrestrial decoupling to climate change in tropical Andes'**](https://www.sciencedirect.com/science/article/abs/pii/S0048969722012074?via%3Dihub). This document shows the most relevant code. See R files within the folder "scripts" for a more specific code. Please refer to the full manuscript for full interpretation and data and plots.
 
-## Workflow of the main numerical analyses. This document shows the most relevant code. See R files within the folder "scripts" for a more specific code.
-
-# Study area and datasets description
-**Lake Llaviucu**: morrained-dammed tropical Lake located in Ecuador (Cajas National Park), at 3115 m of elevation.
+## Study area and datasets description
++ **Lake Llaviucu**: morrained-dammed tropical Lake located in Ecuador (Cajas National Park), at 3115 m of elevation.
 Two sediment cores: 
-  - **Diatom**: 3-m core covering the last ca 3,000 years, and sampled at 1-cm intervals for diatom analysis [Benito et al. 2021 L&O] (https://aslopubs.onlinelibrary.wiley.com/doi/full/10.1002/lno.11747) 
-  - **Pollen**: 11.9-m core covering the last 14,000 years, and sampled at 1-cm intervals for pollen, charcoal and Sporiormella analyses [Nascimiento et al. 2020 QSR] (https://www.sciencedirect.com/science/article/abs/pii/S0277379120304339?via%3Dihub)
+  + **Diatom**: 3-m core covering the last ca 3,000 years, and sampled at 1-cm intervals for diatom analysis [Benito et al. 2021 L&O] (https://aslopubs.onlinelibrary.wiley.com/doi/full/10.1002/lno.11747) 
+  + **Pollen**: 11.9-m core covering the last 14,000 years, and sampled at 1-cm intervals for pollen, charcoal and Sporiormella analyses [Nascimiento et al. 2020 QSR] (https://www.sciencedirect.com/science/article/abs/pii/S0277379120304339?via%3Dihub)
 
-
-# Step 1: Estimate Principal Curves of the diatom record
-```{r}
+## Load packages
+```{r packages, echo=FALSE}
 library(analogue)
 library(tidyverse)
+library(vegan)
+library(analogue)
+library(mgcv)
+library(ggplot2)
+library(gratia)
+```
 
+
+## Step 1: Estimate Principal Curves (PrC) of the diatom record.
+PrC is a nonlinear ordination technique that extracts a single gradient of variation from multivariate data.
+```{r principal curves diatoms, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE}
 #read diatom core datasets
 mergedCores <- read.csv("data/mergedCores_counts4.csv") #this is a dataframe with absolute counts 
 
@@ -88,7 +97,7 @@ llaviucu_diatoms <- llaviucu_diatoms[, abund>1 & n.occur >2] #more than 1% of RA
 llaviucu_diatoms <- cbind(agedepth, llaviucu_diatoms)
 
 # Save Diatom data RA
-write.csv(llaviucu_diatoms, "data/diatomsRA.csv")
+#write.csv(llaviucu_diatoms, "data/diatomsRA.csv")
 
 # Function to fit principal curves
 fitPcurve <- function(i, cores, axis, method, ...) {
@@ -134,16 +143,17 @@ rownames(df) <- NULL
 cores.plot <- ggplot(df[df$Lake=="llaviucu",], aes(x = Age, y = PrC)) +
   geom_point() + geom_line() +
   #coord_flip() +
-  facet_wrap(Lake~., scales = "free")
+  facet_wrap(Lake~., scales = "free") +
+  ggtitle("Diatoms PrC")
 cores.plot
 
 ## write this out for use in the GAM modelling script
-saveRDS(df, file = "outputs/PrC-cores-diatoms.rds") #this is including all spp
+#saveRDS(df, file = "outputs/PrC-cores-diatoms.rds") #this is including all spp
 
 ```
 
-# Step 2: Estimate Principal Curves of pollen record
-```{r principal curves, size="small", results="hide", message=FALSE, error=FALSE, warning=FALSE, echo="FALSE"}
+## Step 2: Estimate PrC of the pollen record (including agropatoralism indicators)
+```{r principal curves, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE, results="hide", size="small"}
 
 # read Pollen data (drop Lycopodium counts)
 pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
@@ -188,11 +198,8 @@ abund <- apply(llaviucu_pollen, 2, max)
 n.occur <- apply(llaviucu_pollen>0, 2, sum)
 llaviucu_pollen <- llaviucu_pollen[, abund>1 & n.occur >2] #more than 1% of RA and present in >2 samples
 
-# Combine dataframe with ages and depths
-llaviucu_pollen <- cbind(agedepth, llaviucu_pollen)
-
 #Save pollen data
-write.csv(llaviucu_pollen, "data/pollenRA.csv")
+#write.csv(llaviucu_pollen, "data/pollenRA.csv")
 
 # Transform data to Hellinger form
 core_hell <- decostand(llaviucu_pollen, method="hellinger")
@@ -209,12 +216,12 @@ pollenPrC <- cbind(agedepth, cores_prc)
 # Plot Pcurves with depth and ages
 pollenPlot <- ggplot(pollenPrC, aes(x = upper_age, y = PrC)) +
   geom_line() + geom_point() +
-  labs(y = "Pollen PrC", x = "Age (cal yr BP)", title = "")
-
+  labs(y = "Pollen PrC", x = "Age (cal yr BP)", title = "") +
+  ggtitle("Pollen PrC")
 pollenPlot
 
 # Save results
-write.csv(pollenPrC, "outputs/pollen-PrC.csv", row.names = FALSE)
+#write.csv(pollenPrC, "outputs/pollen-PrC.csv", row.names = FALSE)
 
 ## assign dataframe to analyze
 llaviucu_pollen <- agropastolarism
@@ -229,28 +236,24 @@ core_hell2 <- core_hell[n.occur>0, ] #one single row has rowSums=0; remove it
 # Run Principal Curves and extract scores for then combining the resulting dataframe with agedepth
 pollen.prc <- prcurve(core_hell2, method = "ca", trace = TRUE, vary = TRUE, penalty = 1.4)
 cores_prc <- scores(pollen.prc, display = "curve")
+
 #AgropastPrC <- cbind(agedepth[-nrow(agedepth),], cores_prc)
 AgropastPrC <- cbind(agedepth, cores_prc)
-
-## save results
-write.csv(AgropastPrC, "outputs/agropastoralism-PrC.csv", row.names = FALSE)
 
 # Plot Pcurves with depth and ages
 AgropastPlot <- ggplot(AgropastPrC, aes(x = upper_age, y = PrC)) +
   geom_line() + geom_point() +
-  labs(y = "Agropastoralism PrC", x = "Age (cal yr BP)", title = "")
+  labs(y = "Agropastoralism PrC", x = "Age (cal yr BP)", title = "") +
+  ggtitle("Agropastoralism PrC")
 AgropastPlot
 
 ```
 
+## Step 3: Interpolation of diatom dataset into pollen record
+Diatom and pollen records are sampled from two different sediment cores with different temporal resolutions: 40-year resolution for pollen and Titanium, and 25-year resolution for diatoms. In order to facilitate comparison, we matched ages of pollen samples (coarser resolution) into diatom record (finer). The final dataset includes a common age column containing Principal curves for diatom, pollen, and agropastoralism, and Titanium time series. 
 
-# Step 3: Interpolation of diatom dataset into pollen record
-Diatom and pollen records are sampled from two different sediment cores. In order to facilitate comparison we matched ages of diatom samples into pollen and Titanium (as indicator of terrigenous input) record. The final dataset includes a common age column containing Principal curves for diatom, pollen, and agropastoralism, and Ti time series. 
-
-```{r interpolation, message=FALSE, error=FALSE, results="hide", size="small"}
-library(tidyverse)
-
-# read in XRF Llaviucu data (pollen record)
+```{r interpolation, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE, size="small"}
+# read in XRF Llaviucu data (pollen record) and remove NAs
 llaviucu_xrf <- read.csv("data/XRFTransformed3000yrs.csv") %>% rename(age=age_calBP) 
 Ti_xrf <- na.omit(llaviucu_xrf[, c("age", "Ti")])
 
@@ -290,69 +293,69 @@ diatomPrC <- na.omit(diatomPrC[, c("Age", "PrC", "elapsedTime")])
 diatomPrC$Age <- round(diatomPrC$Age, 1)
 mean(diff(diatomPrC$Age))
 
-# linear interpolation diatom ~ Ti (pollen record)
-Ti_diat_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, diatomPrC$Age)$y)
-Ti_diat_prc_i$age <- diatomPrC$Age
-colnames(Ti_diat_prc_i) <- c("Ti", "age")
-Ti_diat_prc_i$diat_prc <- diatomPrC$PrC #add PrC data
-diff(Ti_diat_prc_i$age) #check temporal resolution
-Ti_diat_prc_i$elapsedTime <- diatomPrC$elapsedTime #add sample age
 
-# linear interpolation diatom ~ charcoal (pollen record)
-charc_diat_prc_i <- as.data.frame(approx(charcoal$upper_age, charcoal$Charcoal.cc., diatomPrC$Age)$y)
-charc_diat_prc_i$age <- diatomPrC$Age
-colnames(charc_diat_prc_i) <- c("charcoal", "age")
-charc_diat_prc_i$diat_prc <- diatomPrC$PrC #add PrC data
-diff(charc_diat_prc_i$age) #check temporal resolution
+# linear interpolation diatom to pollen PrCs
+diatom_to_pollen_prc_i <- as.data.frame(approx(diatomPrC$Age, diatomPrC$PrC, pollenPrC$Age)$y)
+diatom_to_pollen_prc_i$age <- pollenPrC$Age
+colnames(diatom_to_pollen_prc_i) <- c("PrC", "age")
+diatom_to_pollen_prc_i$pollen_prc <- pollenPrC$PrC
+#head(diatom_to_pollen_prc_i)
+diff(diatom_to_pollen_prc_i$age)
+diatom_to_pollen_prc_i$elapsedTime <- pollenPrC$elapsedTime
+#plot(diatom_to_pollen_prc_i[,1], diatom_to_pollen_prc_i[,3])
+
+# linear interpolation diatom to agropastoralism PrCs
+diatom_to_agropast_prc_i <- as.data.frame(approx(diatomPrC$Age, diatomPrC$PrC, agropastPrC$Age)$y)
+diatom_to_agropast_prc_i$age <- agropastPrC$Age
+colnames(diatom_to_agropast_prc_i) <- c("PrC", "age")
+diatom_to_agropast_prc_i$agropast_prc <- agropastPrC$PrC
+#head(diatom_to_agropast_prc_i)
+diff(diatom_to_agropast_prc_i$age)
+diatom_to_agropast_prc_i$elapsedTime <- agropastPrC$elapsedTime
+#plot(diatom_to_agropast_prc_i[,1], diatom_to_agropast_prc_i[,3])
 
 
-# linear interpolation pollen ~ Ti
+# linear interpolation 2009 pollen ~ 2009 Ti--this is the same for agropast
 Ti_pollen_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, pollenPrC$Age)$y)
 Ti_pollen_prc_i$age <- pollenPrC$Age
 colnames(Ti_pollen_prc_i) <- c("Ti", "age")
-Ti_pollen_prc_i$pollen_prc <- pollenPrC$PrC #add PrC data
-Ti_pollen_prc_i$elapsedTime <- pollenPrC$elapsedTime #check temporal resolution
+Ti_pollen_prc_i$pollen_prc <- pollenPrC$PrC
+Ti_pollen_prc_i$elapsedTime <- pollenPrC$elapsedTime
+#plot(Ti_pollen_prc_i[,1], Ti_pollen_prc_i[,3])
 
 
-# linear interpolation agropastoralism ~ Ti
-Ti_agropast_prc_i <- as.data.frame(approx(Ti_xrf$age, Ti_xrf$Ti, agropastPrC$Age)$y)
-Ti_agropast_prc_i$age <- agropastPrC$Age
-colnames(Ti_agropast_prc_i) <- c("Ti", "age")
-Ti_agropast_prc_i$agrospast_prc <- agropastPrC$PrC
+# Merge all datasets coarser dataset (pollen)
+interpolatedData <- as.data.frame(cbind(diatom_to_pollen_prc_i$age, diatom_to_pollen_prc_i$PrC,
+                                        diatom_to_pollen_prc_i$elapsedTime, #elapsed time in equal time resolution than Ti
+                                        diatom_to_pollen_prc_i$pollen_prc, 
+                                        diatom_to_agropast_prc_i$agropast_prc,
+                                        Ti_pollen_prc_i$Ti))
 
-# Merge all datasets
-interpolatedData <- as.data.frame(cbind(Ti_diat_prc_i$age, Ti_diat_prc_i$Ti,
-                          charc_diat_prc_i$charcoal,
-                          Ti_pollen_prc_i$elapsedTime, #elapsed time in equal time resolution than Ti
-                          Ti_diat_prc_i$elapsedTime, #elapsed time in equal time resolution than diatoms
-                          Ti_diat_prc_i$diat_prc,
-                          Ti_pollen_prc_i$pollen_prc, Ti_agropast_prc_i$agrospast_prc))
-
-colnames(interpolatedData) <- c("Age", "Ti", "charcoal", "elapsedTime_ti", "elapsedTime_diat", "diatPrC", "pollenPrC", "agropastPrC")
+colnames(interpolatedData) <- c("Age", "diatPrC", "elapsedTime_ti", "pollenPrC", "agropastPrC", "Ti")
+median(diff(interpolatedData$Age))
+head(interpolatedData)
 
 # save data
-write.csv(interpolatedData, "outputs/principalcurves_ti_interp.csv")
+#write.csv(interpolatedData, "outputs/principalcurves_ti_interp_coarser.csv")
 ```
 
-# Visualization of Lake Llaviucu proxies
-Here we generate an stacked plot of the time series
-```{r summaryPlots}
+## Visualization of Lake Llaviucu proxies
+Here we generate an stacked plot of the interpolated time series
+```{r summaryPlots, echo=TRUE, warning=FALSE}
 # read data
-df <- interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1] %>%
-  mutate(sample_age_mean=(elapsedTime_ti+elapsedTime_diat)/2) #average sample ages of pollen and diatom records
-head(df)
+df <- interpolatedData <- read.csv("outputs/principalcurves_ti_interp_coarser.csv")[,-1] 
 
 # Define theme
 theme_set(theme_bw())
 
 # Plot stacked time series
 data_plt <- df %>% 
-  gather(key = proxy, value = var, -Age, -elapsedTime_ti, -elapsedTime_diat)
+  gather(key = proxy, value = var, -Age, -elapsedTime_ti)
 
 plt <- ggplot(data_plt, aes(x=Age, y=var))+
   geom_line() +
   facet_grid(vars(proxy), scales = "free") +
-  labs(y = "", x = "Age (cal yr BP)", title = "")
+  labs(y = "", x = "Age (cal years BP)", title = "")
 plt
 
 # plt_agropast <- ggplot(agroast_long, aes(x=upper_age, y=value))+
@@ -364,51 +367,26 @@ plt
 
 
 # Save plot
-ggsave("outputs/stackedTS.png",
-       plot = plt_agropast,
-       width = 10,
-       height=8,
-       units="in",
-       dpi = 400)
-
-# Generate a series of phase-space for drivers (pollen, agropastoralism, Ti, charcoal) vs response variables (diatoms) coloured by year
-
-ggplot(df, aes(x=pollenPrC, y=diatPrC, colour=Age)) +
-  geom_point(size=2) +
-  scale_color_viridis_c()
-
-ggplot(df, aes(x=agropastPrC, y=diatPrC, colour=Age)) +
-  geom_point(size=2) +
-   scale_color_viridis_c()
-
-ggplot(df, aes(x=Ti, y=diatPrC, colour=Age)) +
-  geom_line(size=2) +
-   scale_color_viridis_c()
-
-ggplot(df, aes(x=charcoal, y=diatPrC, colour=Age)) +
-  geom_point(size=2) +
-   scale_color_viridis_c()
+# ggsave("outputs/stackedTS.png",
+#        plot = plt_agropast,
+#        width = 10,
+#        height=8,
+#        units="in",
+#        dpi = 400)
 
 ```
 
+# Step 4: Fit PrC-GAMs--**Covariates model**
+In this step, we model diatom PrC trend as function of pollen PrC, agropastoralism PrC, and Titanium with Generalized Additive Models (GAMs) using the previous generated interpolated dataset. We then extract predicted values to test the temporal contribution of these covariates to explain drivers of diatom change over time.
 
-# Step 4: Fit PrC-GAMs 
-In this step we model diatom PrC as function of pollen, agropastoralism and Ti with Generalized Additive Models (GAMs). We then extract predicted values to test the temporal contribution of these covariates to explain drivers of diatom assemblage change.
-
-```{r prc-gam, message=FALSE, error=FALSE, results="hide", size="small"}
-library(mgcv)
-library(tidyverse)
-library(ggplot2)
-library(gratia)
-
-# Read in the interpolated dataset of Ti, pollen and agropastoralism PrCs 
-interpolatedData <- read.csv("outputs/principalcurves_ti_interp.csv")[,-1] %>%
-  mutate(sample_age_mean=(elapsedTime_ti+elapsedTime_diat)/2) #average sample ages of pollen and diatom records
+```{r prc-gam, error=FALSE, message=FALSE, size="small"}
+# Read in the interpolated dataset of diatoms, agropastoralism, and Titanium on pollen record
+interpolatedData <- read.csv("outputs/principalcurves_ti_interp_coarser.csv")
 
 # this chunk run the model weighting in the elapsed time of the pollen record
-mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(Ti) + s(pollenPrC) + s(agropastPrC),
+mod1 <- gam(diatPrC ~ s(Age, k=20, bs="ad") + s(Ti, k=10, bs="ad") + s(pollenPrC, k=15, bs="ad") + s(agropastPrC, k=15, bs="ad"),
             data = interpolatedData, method = "REML", 
-            weights = elapsedTime_diat / mean(elapsedTime_diat),
+            weights = elapsedTime_ti / mean(elapsedTime_ti),
             select = TRUE, family = gaussian(link="identity"),
             na.action = na.omit,
             knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
@@ -416,90 +394,476 @@ mod1 <- gam(diatPrC ~ s(Age, k=40, bs="ad") + s(Ti) + s(pollenPrC) + s(agropastP
 plot(mod1, page=1, scale = 0)
 gam.check(mod1)
 appraise(mod1)
-summary(mod1)
 
-
-#Check temporal autocorrelation of the residuals
-pacf(residuals(mod1)) # indicates AR1 at lag 10
-
-#accounting for temporal autocorrelation (note basis function with adaptative splines are not possible)
-mod1.car <- gamm(diatPrC ~ s(Age, k=40) + s(Ti) + s(pollenPrC) + s(agropastPrC),
-                 data = interpolatedData, method = "REML", 
-                 weights = elapsedTime_diat/ mean(elapsedTime_diat),
-                 family = gaussian(link="identity"),
-                 correlation = corCAR1(form = ~ Age),
-                 knots = list(negAge=quantile(interpolatedData$Age, seq(0,1, length=10)))) #places notes at the deciles of sample ages
-
-# Check model fit
-pacf(residuals(mod1.car$lme))
-plot(mod1.car$gam, page=1, scale = 0)
-summary(mod1.car$gam)
-gam.check(mod1.car$gam)
-
-
-#Compare different model fits using AIC
-AIC_table <- AIC(mod1, mod1.car$lme)%>%
-  rownames_to_column(var= "Model")%>%
-  mutate(data_source = rep(c("diatom_data")))%>%
-  group_by(data_source)%>%
-  mutate(deltaAIC = AIC - min(AIC))%>%
-  ungroup()%>%
-  dplyr::select(-data_source)%>%
-  mutate_at(.vars = vars(df,AIC, deltaAIC), 
-            .funs = funs(round,.args = list(digits=0)))
-
-AIC_table
-
-
-# Predict GAM
-#Check NAs and remove rows
+## Predict GAM
+# data to predict at. First check NAs and remove rows
 row.has.na <- apply(interpolatedData, 1, function(x){any(is.na(x))})
-sum(row.has.na)
 interpolatedData <- interpolatedData[!row.has.na,]
 
 ## Predict
 predGam <- cbind(interpolatedData, 
                  data.frame(predict.gam(mod1, interpolatedData, 
-                                        type = "terms" , se.fit = TRUE)))
+                 type = "terms" , se.fit = TRUE)))
 
-#Select covariates to plot (those having significant effects on the mean values of diatom PrC)
+#plot
 var <- predGam$fit.s.agropastPrC.
 se.var <- predGam$se.fit.s.agropastPrC.
 
-# Plot temporal contribution of covariates on response 
 predGamPlt <- ggplot(predGam, aes(x = Age, y = var)) +
   geom_line() +
-  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var), alpha = 0.1)) +
+  geom_ribbon(aes(ymin = var + (2 * se.var), ymax = var - (2 * se.var)),alpha=0.4) +
+  geom_point()+
   #scale_x_reverse() +
-  labs(y = "Diatom GAM PrC", x = "Cal yr BP", title = "")+
+  labs(y = "Agropastoralism", x = "cal years BP", title = "")+
   theme(legend.position = "none")+
   geom_hline(yintercept=0, linetype="dashed")+
   theme_bw()+ theme(legend.position = "none")+
-  ggtitle(expression("Agropastoralism" %->% "Diatoms"))
+  #ggtitle(expression("Agropastoralism" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.ticks.x = element_blank(),
+        axis.text.y = element_text(size=12),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
 
-predGamPlt
+var2 <- predGam$fit.s.pollenPrC.
+se.var2 <- predGam$se.fit.s.pollenPrC.
 
-# Save plot
-ggsave("outputs/diatomPrC_GAM_covariates.png",
-       plot = predGamPlt ,
-       width = 10,
-       height=8,
+predGamPlt2 <- ggplot(predGam, aes(x = Age, y = var2)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var2 + (2 * se.var2), ymax = var2 - (2 * se.var2)),alpha=0.4) +
+  geom_point()+
+  #scale_x_reverse() +
+  labs(y = "Pollen", x = "cal years BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  #ggtitle(expression("Pollen" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.ticks.x = element_blank(),
+        axis.text.y=element_text(size=12),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
+
+var3 <- predGam$fit.s.Ti.
+se.var3 <- predGam$se.fit.s.Ti.
+
+predGamPlt3 <- ggplot(predGam, aes(x = Age, y = var3)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = var3 + (2 * se.var3), ymax = var3 - (2 * se.var3)),alpha=0.4) +
+  geom_point()+
+  #scale_x_reverse() +
+  labs(y = "Titanium", x = "cal years BP", title = "")+
+  theme(legend.position = "none")+
+  geom_hline(yintercept=0, linetype="dashed")+
+  theme_bw()+ theme(legend.position = "none")+
+  #ggtitle(expression("Titanium" %->% "Diatoms")) +
+  theme(strip.text.x = element_text(size = 12),
+        axis.text.y=element_text(size=12),
+        axis.text.x = element_text(size = 11),
+        axis.title.x = element_text(size=12),
+        axis.title.y=element_text(size=14))
+
+# Make composite plot (Figure 3 of the manuscript)
+library(cowplot)
+predGam_all <- plot_grid(predGamPlt, predGamPlt2, predGamPlt3, align = "hv", 
+                            nrow=3,ncol = 1, axis="tblr", labels = "AUTO")
+predGam_all
+
+# ggsave("outputs/diatomPrC_GAM_covariates.png",
+#        plot = predGam_all ,
+#        width = 8,
+#        height=10,
+#        units="in",
+#        dpi = 150)
+
+```
+
+## Step 5: Hierarchical Generalized Additive Models (HGAM) -- **Synchronous model**
+In this step we model, first, diatom and pollen assemblages using HGAM and then calculate average rate of change at assemblage-level to assess the timing in the start of rapid change in the time-series, and test comparable rates of change between aquatic and terrestrial ecosystems.
+
+By obtaining derivative-based values of the diatom, terrestrial pollen, and agropastoralism time series we obtain regular time intervals at 24-year resolution (median between diatom and pollen records) and hence comparable--same time steps-- for fitting the synchronous and asynchronous models. 
+
+We fit model I HGAM (Pedersen et al., 2019): group-level smoothness between groups (spp) without a global smooth while allowing different willingness to not assume any shape among species for each assemblage.
+
+### Diatom assemblages
+This chunk is reproducible for pollen and agropastoralism assemblages
+
+```{r HGAMdiatoms, echo=TRUE, error=FALSE, message=FALSE, size="small"}
+#read dataframe with diatom absolute counts
+mergedCores <- read.csv("data/mergedCores_counts4.csv")[-1] 
+
+#import dataframe wiht old and new names to group
+changes <- read.csv("data/old_new_nms_cores_counts.csv", stringsAsFactors = FALSE)
+#new1: ecological groups
+#new2: harmonized taxonomic names
+
+#filter cores
+select <- c("llaviucu")
+
+# this is to select the most common species for a single lake   
+core <- mergedCores %>% 
+  filter(str_detect(lake, select))
+
+agedepth <- core[, names(core) %in% c("depth", "upper_age", "lower_age", "lake")]
+diat <- core[, !names(core) %in% c("depth", "upper_age", "lower_age", "lake")]
+diat[is.na(diat)] <- 0
+
+#Select most common species 
+criteria <- 0.5 #% of the total samples
+
+n.occur <- apply(diat>0, 2, sum)
+diat_red <- diat[, n.occur > (dim(diat)[1])*criteria] #
+diat <- cbind(agedepth, diat_red)
+
+##This creates the dataset containing the most common species for a single lake core
+#Gather
+spp_thin <- diat %>% 
+  gather(key = taxa, value = count, -depth, -upper_age, -lower_age,  -lake) #don't gather depths, ages and lake variables
+
+diat_data <- spp_thin %>%
+  mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_2)) %>%
+  group_by(depth) %>%
+  mutate(total_sample = sum(count)) %>% 
+  filter(!total_sample == "0") %>% #this is to remove empty samples
+  filter(!upper_age == 0) %>% #this is to remove ages == 0 (triumfo and fondodocha record)
+  mutate(log_total_counts = log10(total_sample+1)) %>%
+  mutate(relative_abundance_percent = count / sum(count) * 100) %>%
+  mutate(negAge = -upper_age) %>%
+  mutate(AgeCE = upper_age*(-1)+1950) %>%
+  #filter(AgeCE >= "0") %>%
+  mutate(elapsedTime = abs(upper_age - lower_age)) %>%
+  ungroup() %>%
+  group_by(lake) %>%
+  mutate(spp = factor(taxa)) 
+
+levels(diat_data$spp) #check how many diatom species
+
+set.seed(10) #set a seed so this is repeatable
+
+#model I HGAM: different smoothness for each taxa without a global smooth
+diatom_gam_I<- gam(count ~ s(negAge, by=spp, k=20, bs="fs") +
+                     s(spp, bs="re") + offset(log_total_counts),
+                   weights = elapsedTime / mean(elapsedTime),
+                   data=diat_data, family = nb,
+                   knots = list(negAge=quantile(diat_data$negAge, seq(0,1, length=10))), #places notes at the deciles of sample ages
+                   method = "REML")
+gam.check(diatom_gam_I)
+```
+
+#### Create synthetic data to predict over a range of ages and plot group-level trends with different smootheness (HGAM)
+
+```{r HGAMpredict, error=FALSE, message=FALSE, size="small"}
+diat_plot_data <- with(diat_data, as_tibble(expand.grid(negAge = seq(min(diat_data$negAge), max(diat_data$negAge)),
+                                                        spp = factor(levels(diat_data$spp)),
+                                                        log_total_counts = mean(log_total_counts))))
+
+diat_modI_fit <- predict(diatom_gam_I,
+                         newdata = diat_plot_data,
+                         se.fit = TRUE)
+
+#non-shared trends
+diat_plot_data$modI_fit <- as.numeric(diat_modI_fit$fit)
+
+# For only one model
+diat_plot_data <- gather(diat_plot_data, key=model, value=fit, modI_fit)
+diat_plot_data <- mutate(diat_plot_data, se= c(as.numeric(diat_modI_fit$se.fit)),
+                         upper = exp(fit + (2 * se)),
+                         lower = exp(fit - (2 * se)),
+                         fit   = exp(fit))
+
+#non-shared trends
+theme_set(theme_bw())
+theme_update(panel.grid = element_blank())
+
+diat_plot <- ggplot(diat_plot_data) +
+  facet_wrap(~spp, nrow = 4,scales = "free_y")+
+  geom_ribbon(aes(x=negAge,
+                  ymin = lower,
+                  ymax = upper,
+                  fill = model),
+              alpha=0.2)+
+  scale_x_reverse()+
+  geom_point(data= diat_data, aes(x = negAge, y = count), size=0.06) +
+  geom_line(aes(x = negAge, y = fit, color = model))+
+  labs(y = "Absolute counts", x = "Age (cal yr BP)") +
+  ggtitle("HGAM diatoms") +
+  scale_fill_brewer(name = "", palette = "Dark2") +
+  scale_colour_brewer(name = "",
+                      palette = "Dark2")+
+  theme(legend.position = "top",
+        strip.text = element_text(size=10))
+
+diat_plot
+```
+## Step 6: Calculation of derivatives and posterior distribution simulation
+```{r derivatives, error=FALSE, message=FALSE, size="small"}
+set.seed(10) #set a seed so this is repeatable
+n_sims = 250
+n_length = 140
+years <- seq(min(diat_plot_data$negAge),
+             max(diat_plot_data$negAge),
+             length.out = n_length)
+
+model <- diatom_gam_I
+pred <- diat_modI_fit
+
+# Generate multivariate normal simulations of model coefficients
+random_coefs <- t(rmvn(n_sims, mu = coef(model),V = vcov(model)))
+
+confint_sims <- crossing(spp=unique(diat_plot_data$spp),
+                         negAge = seq(min(diat_plot_data$negAge),
+                                      max(diat_plot_data$negAge),
+                                      length.out = n_length),
+                         log_total_counts=0)
+
+map_pred_sims <- predict(model,
+                         confint_sims,
+                         type = "lpmatrix") %*% random_coefs %>%
+  as_data_frame() %>%
+  bind_cols(confint_sims)%>%
+  gather(key = simulation, value = pred, -negAge, -log_total_counts,-spp)
+
+
+#specifying the step size for numerical derivative calculations
+delta = 0.01
+
+#calculating the predicted value for the current year plus delta
+step_ahead_fits = confint_sims %>%
+  mutate(negAge = negAge+delta)%>%
+  predict(model, 
+          ., type = "lpmatrix") %*% random_coefs 
+
+
+#calculating the predicted value for the current year minus delta
+step_behind_fits = confint_sims %>%
+  mutate(negAge = negAge-delta)%>%
+  predict(model,
+          ., type = "lpmatrix") %*% random_coefs 
+
+
+#Function for calculating first derivatives of time series given a before,
+#after, and delta step size
+calc_1st_deriv = function(fit_before, fit_after,delta) {
+  (fit_after-fit_before)/(2*delta)
+}
+
+
+#using the predicted values for year plus and minus delta to calculate
+#derivatives for each species for each simulation
+
+derivs <- calc_1st_deriv(step_behind_fits,step_ahead_fits,delta = delta)%>%
+  as_data_frame()%>%
+  bind_cols(confint_sims)%>%
+  gather(key = simulation,value = deriv, -spp,-negAge, -log_total_counts)
+
+#Creating summaries of derivatives for each simulation for each year
+deriv_summaries <- derivs %>%
+  group_by(negAge,simulation)%>%
+  summarize(deriv_mean = mean(deriv),
+            deriv_sd = sd(deriv))%>%
+  group_by(negAge)%>% #turning derivative summaries into 95% confidence intervals
+  select(-simulation)%>%
+  summarize_all(.funs = list(lower = ~quantile(.,probs = 0.025),
+                             upper = ~quantile(.,probs = 0.975),
+                             med   = ~quantile(.,probs = 0.5)))
+
+diatoms_deriv <- deriv_summaries
+
+```
+
+#### Plotting the HGAM-derivative diatom time series
+
+```{r derivatives plot, error=FALSE, message=FALSE, size="small"}
+#Plotting mean rate of change plus the 95% CI
+mean_plot <- diatoms_deriv %>%
+  ggplot(aes(x = negAge, 
+             y = deriv_mean_med, 
+             ymin = deriv_mean_lower,
+             ymax = deriv_mean_upper))+
+  geom_ribbon(fill="grey")+
+  geom_line()+
+  geom_hline(yintercept = 0, linetype=2) +
+  scale_y_continuous("")+
+  xlab("Cal years BP") +
+  theme_bw()
+mean_plot 
+
+#Plotting standard deviation of rate of change plus the 95% CI
+sd_plot <- deriv_summaries %>%
+  ggplot(aes(x = negAge, 
+             y = deriv_sd_med, 
+             ymin=deriv_sd_lower,
+             ymax=deriv_sd_upper))+
+  geom_ribbon(fill="grey")+
+  geom_line()+
+  geom_hline(yintercept = 0, linetype=2) +
+  scale_y_continuous("")+
+  xlab("Cal years BP") +
+  theme_bw()
+sd_plot
+```
+
+## Step 7: Generalized Least Squares (GLS) -- **Asynchronous model**
+
+The **asynchronous model** consists in two steps:
+
++  Generating lagged time series: diatom samples (response) are paired with antecedent samples of predictors (pollen and agropastoralism)
++  Modeling time-delayed effects of pollen and agropastoralism rates of change (separately) on diatom rate of change
+
+We use functions developed by **Blas Benito** in his co-authored paper led by **Graciela Gil-Romera** and colleagues [Long-term fire resilience of the Ericaceous Belt, Bale Mountains, Ethiopia](https://github.com/BlasBenito/BaleFire)
+
+Given the temporal mean age resolution of the diatom record (ca 25 years), we generated 40 lags (2500 years matching the two record lengths). Every diatom sample has been paired with the antecedent pollen and agropastoralism samples (separately). This process is repeated for every sample and every lag.
+
+The question to be answered by applying this model is: Are time-delayed effects of pollen (and agropastoralism) rates of change on current rate of change of diatoms? This is written in the following Equation 1:
+
+**Equation 1**: $$DiatomRateofChange_{t} = \alpha + \beta Predictors_{t+lag} + \epsilon$$
+
+Where:
++  $t$ is the age of the diatom sample
++  $lag$ is the time-span in between the response samples and the antecedent samples of the predictors (pollen and agropastoralism.
+
+The function **backwardLags** aims to assess the effect of “past” pollen or agropastoralism values on diatoms.
+The function *modelLagData* fits one Generalized Least Squares (GLS) model per lag, and computes pseudo R-squared values and standardized coefficient estimates.
+
+
+
+```{r GLS, error=FALSE, message=FALSE, size="small"}
+# Read in smoothed derivative proxy (diatoms, native pollen, and agropastoralism) time series
+derivAll <- read.csv("outputs/pollen-agropast-diatom-deriv_24timeSteps.csv")
+
+# Read in functions
+source("scripts/functions_custom.R")
+
+# Subset datasets: diatoms
+diat <- derivAll %>% filter(proxy=="diatoms") %>% select(negAge,deriv_mean_med) %>%
+  mutate(age=negAge) %>% data.frame()
+diat$age <- round(diat$age, 1)
+diat$negAge <- NULL
+colnames(diat) <- c("diatom_deriv", "age")
+round(diff(diat$age, 1))[1]
+
+# Subset datasets: Native pollen
+pollen <- derivAll %>% filter(proxy=="pollen") %>% select(negAge, deriv_mean_med) %>%
+  mutate(age=negAge) %>% data.frame()
+pollen$age <- round(pollen$age, 1)
+pollen$negAge <- NULL
+colnames(pollen) <- c("pollen_deriv", "age")
+round(diff(pollen$age, 1))[1] #check temporal resolution
+
+# Subset datasets: Agropastoralism
+agropastolarism <- derivAll %>% filter(proxy=="agropastoralism") %>% select(negAge, deriv_mean_med) %>%
+  mutate(age=negAge) %>% data.frame()
+agropastolarism$age <- round(agropastolarism$age, 1)
+agropastolarism$negAge <- NULL
+colnames(agropastolarism) <- c("pollen_deriv", "age") #note the change of the column name
+round(diff(agropastolarism$age, 1))[1]
+
+### Backward lags
+lags<-1:40
+
+#backward dataset 
+#to assess the effect of “past” pollen or agropastoralism values on diatoms
+lag.data.backward <- backwardLags(
+  lags=lags, 
+  reference.data=diat, 
+  data.to.lag=pollen
+)
+
+# Fitting a GLS model per lag on backward datasets
+backward.results <- modelLagData(
+  model.formula="diatom_deriv ~ pollen_deriv", 
+  lagged.data=lag.data.backward
+)
+
+backward.results$value <- round(backward.results$value, 2)
+
+# Fitting a null model
+backward.results.random <- modelRandomLagData(
+  lagged.data=lag.data.backward, 
+  model.formula="diatom_deriv ~ pollen_deriv", 
+  iterations=1000
+)
+
+backward.results.random$value <- round(backward.results.random$value, 2)
+
+
+# Plot model results
+## Set axes limits
+max.lag = max(c(backward.results$lag))
+max.coefficient = round(max(c(backward.results[backward.results$variable=="Coefficient", "value"], backward.results.random[backward.results.random$variable=="Coefficient", "upper"])) + 0.1, 1)
+min.coefficient = round(min(c(backward.results[backward.results$variable=="Coefficient", "value"], backward.results.random[backward.results.random$variable=="Coefficient", "lower"])) - 0.1, 1)
+max.R2 = round(max(c(backward.results[backward.results$variable=="R2", "value"])), 1)
+
+library(viridis)
+viridis.colors <- viridis(10, option="D")
+
+backward.plot.coefficient <- ggplot(data=subset(backward.results, variable=="Coefficient"), aes(x=lag, y=value)) +
+  geom_ribbon(data=subset(backward.results.random, variable=="Coefficient"), aes(ymin=lower, ymax=upper), alpha=0.3, fill="light grey") +
+  geom_line(data=subset(backward.results.random, variable=="Coefficient"), aes(x=lag, y=value), alpha=0.6, color="light grey", size=1) +
+  geom_hline(yintercept=0, color="black", linetype=2) +
+  geom_ribbon(aes(ymin=lower,ymax=upper), alpha=0.3, fill=viridis.colors[2]) +
+  geom_line(size=1.5, color=viridis.colors[1]) +
+  ggtitle(expression("Pollen" %->% "Diatoms")) +
+  theme(legend.position="none") +
+  xlab("") +
+  ylab("Standardized coefficient") +
+  scale_y_continuous(breaks=seq(min.coefficient, max.coefficient, by=0.8)) +
+  #scale_x_reverse()+
+  theme(axis.text.y = element_text(size=16),
+        axis.text.x = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        plot.title = element_text(size=16),
+        plot.margin = unit(c(0, 0, 0, 0), "cm"),
+        axis.title.x=element_blank()) +
+        #axis.text.x=element_blank(),
+        #axis.line.x=element_blank(),
+        #axis.ticks.x = element_blank()) +
+  theme_classic()
+  #coord_cartesian(ylim = c(min.coefficient, max.coefficient + 0.5))
+
+#backward.plot.coefficient
+
+backward.plot.R2 <- ggplot(data=subset(backward.results, variable=="R2"), aes(x=lag, y=value, group=variable)) +
+  geom_ribbon(data=subset(backward.results.random, variable=="R2"), aes(ymin=lower, ymax=upper), alpha=0.3, fill="light grey") +
+  geom_line(data=subset(backward.results.random, variable=="R2"), aes(x=lag, y=value), alpha=0.6, color="light grey", size=1.5) +
+  geom_line(size=1.5, color=viridis.colors[2]) +
+  theme(legend.position="none") +
+  xlab("Years (before Diatom samples)") +
+  ylab("Pseudo R squared") +
+  scale_y_continuous(breaks=seq(0, max.R2, by=0.1)) +
+  #scale_x_reverse()+
+  theme(axis.text.y = element_text(size=16),
+        axis.text.x = element_text(size=16),
+        plot.title = element_text(size=16),
+        axis.title.y = element_text(size=16),
+        plot.margin = unit(c(0.2, 0.5, 0, 0), "cm")) +
+  theme_classic() +
+  coord_cartesian(ylim = c(0, max.R2 + 0.05))
+
+#backward.plot.R2
+
+#Combine the two plots
+library(cowplot)
+plot_composite <- plot_grid(backward.plot.coefficient, 
+                            backward.plot.R2, ncol = 1, 
+                            rel_heights = c(1, 1), align="v") + 
+                            theme(plot.margin = unit(c(0.5, -1, 0.5, 0.5), "cm"))
+plot_composite
+
+# save plot
+ggsave("outputs/pollen_diatoms_asycnchronousModel.png",
+       plot = plot_composite,
+       width=8,
+       height=6,
        units="in",
-       dpi = 400)
+       dpi = 300)
+
+
 
 
 ```
-
-# Step 5: Hierarchical Generalized Additive Models (HGAM) 
-In this step we model, first, diatom and pollen assemblages using HGAM and then calculate average rate of change at assemblage-level to assess the timing in the start of ecological change and test comparable rates of change between aquatic and terrestrial ecosystems.
-
-
-By obtaining derivative-based values of the aquatic (diatom) and terrestrial (agropastoralism, pollen, and XRF) time series we obtain regular time intervals at 24-year resolution (median between diatom and pollen records) and hence comparable for the synchronous/asynchronous model. 
-
-```{r HGAM, message=FALSE, error=FALSE, results="hide", size="small"}
-
-```
-
 
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
