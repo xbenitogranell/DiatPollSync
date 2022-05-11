@@ -3,9 +3,8 @@ title: "WORKFLOW for Lake Llaviucu aquatic-terrestrial ecological coupling"
 author: 'Author: Xavier Benito (xavier.benito.granell@gmail.com)'
 date: 'Date: 29/04/2022'
 output:
-  html_document:
-    df_print: paged
-    pdf_document: default
+  html_notebook: default
+  pdf_document: default
 ---
 
 ## Introduction
@@ -48,7 +47,7 @@ changes <- read.csv("data/old_new_nms_cores_counts.csv", stringsAsFactors = FALS
 #this is to transform to tidy format, calculate % and subset more common species
 new <- diatoms_save %>% 
   gather(key = taxa, value = count, -depth, -upper_age, -lower_age, -lake) %>%
-  mutate(taxa = plyr::mapvalues(taxa, from = changes$old, to = changes$new_2)) %>%
+  mutate(taxa = plyr::mapvalues(taxa, from = changes[,1], to = changes$new_2)) %>%
   group_by(depth, taxa, lake, upper_age, lower_age) %>%
   summarise(count = sum(count)) %>%
   filter(!count == "0" ) %>% #this is to remove empty samples (rows)
@@ -153,7 +152,7 @@ cores.plot
 ```
 
 ## Step 2: Estimate PrC of the pollen record (including agropatoralism indicators)
-```{r principal curves, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE, results="hide", size="small"}
+```{r principal curves, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE, size="small"}
 
 # read Pollen data (drop Lycopodium counts)
 pollen <- read.csv("data/llaviucu_pollen_counts.csv") %>%
